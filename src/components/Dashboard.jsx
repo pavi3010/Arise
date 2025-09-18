@@ -1,8 +1,7 @@
 import { useAuth } from '../contexts/AuthContext';
 import { logOut } from '../firebase';
 import { useNavigate } from 'react-router-dom';
-
-import { SpeedInsights } from "@vercel/speed-insights/next"
+import { SpeedInsights } from "@vercel/speed-insights/react";
 
 function Dashboard() {
   const { currentUser } = useAuth();
