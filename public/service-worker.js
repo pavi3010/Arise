@@ -7,6 +7,3 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
-self.addEventListener('fetch', event => {
-  // You can add custom fetch logic here if needed
-});

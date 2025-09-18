@@ -11,8 +11,13 @@ function Login() {
   // On mount, always try offline login first
   useEffect(() => {
     const userData = localStorage.getItem('ariseUser');
-    if (userData) {
-      navigate('/dashboard');
+    try {
+      const parsed = userData && JSON.parse(userData);
+      if (parsed && typeof parsed === 'object' && parsed.uid) {
+        navigate('/dashboard');
+      }
+    } catch (e) {
+      // Invalid JSON or no user, stay on login
     }
   }, [navigate]);
 

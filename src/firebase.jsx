@@ -124,7 +124,8 @@ export const logOut = async () => {
   } catch (error) {
     console.warn("⚠️ Sign-out error (probably offline):", error);
   }
-  // Do NOT remove localStorage user, so offline login persists
+  // Remove localStorage user so offline login is cleared
+  localStorage.removeItem('ariseUser');
 };
 
 export { auth, db };
