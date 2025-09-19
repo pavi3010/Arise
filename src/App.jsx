@@ -3,6 +3,9 @@ import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
+import SchoolDashboard from './pages/SchoolDashboard';
+import StaffDashboard from './pages/StaffDashboard';
+import StudentDashboard from './pages/StudentDashboard';
 import OfflineFallback from './components/OfflineFallback';
 import './App.css';
 
@@ -51,6 +54,30 @@ function App() {
             element={
               <PrivateRoute>
                 <Dashboard />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/dashboard/school" 
+            element={
+              <PrivateRoute>
+                <SchoolDashboard />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/dashboard/staff" 
+            element={
+              <PrivateRoute>
+                <StaffDashboard />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/dashboard/student" 
+            element={
+              <PrivateRoute>
+                <StudentDashboard />
               </PrivateRoute>
             } 
           />
