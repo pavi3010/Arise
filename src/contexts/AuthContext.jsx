@@ -13,16 +13,14 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Let Firebase's onAuthStateChanged manage the user session.
+    // It automatically handles persisted users from localStorage/IndexedDB.
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setCurrentUser(user);
-      } else {
-        // Try offline user from localStorage
-        const cachedUser = localStorage.getItem('ariseUser');
-        setCurrentUser(cachedUser ? JSON.parse(cachedUser) : null);
-      }
+      setCurrentUser(user); // This will be the Firebase user object or null
       setLoading(false);
     });
+
+    // Cleanup the subscription when the component unmounts
     return unsubscribe;
   }, []);
 

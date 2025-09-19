@@ -33,7 +33,15 @@ function Login() {
   const navigate = useNavigate();
 
   useEffect(() => {
-  }, []);
+    if (currentUser) {
+      // User is already logged in, so redirect to their dashboard
+      const ariseUser = JSON.parse(localStorage.getItem('ariseUser') || '{}');
+      const role = ariseUser.userType;
+      if (role) {
+        redirectToDashboard(role);
+      }
+    }
+  }, [currentUser]);
 
   function redirectToDashboard(role) {
     if (role === 'school') navigate('/dashboard/school');
