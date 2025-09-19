@@ -31,6 +31,7 @@ function Login() {
   const [selectedRole, setSelectedRole] = useState('');
   const [userType, setUserType] = useState('');
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
 
   useEffect(() => {
     if (currentUser) {
