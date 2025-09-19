@@ -1,6 +1,9 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import SwitchRole from '../components/SwitchRole';
+import { useAuth } from '../contexts/AuthContext';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { logOut } from '../firebase';
 
 // --- Helper Icon Components ---
 const LogoutIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" /></svg>;
@@ -28,11 +31,16 @@ const ActionCard = ({ title, description, icon, color }) => (
 
 export default function StudentDashboard() {
     const navigate = useNavigate();
-    const ariseUser = JSON.parse(localStorage.getItem('ariseUser') || '{}');
+    const { userProfile } = useAuth();
+    const isOnline = useOnlineStatus();
 
-    function handleLogout() {
-        localStorage.removeItem('ariseUser');
-        navigate('/login');
+    async function handleLogout() {
+        try {
+            await logOut();
+            // No need to navigate; AuthContext and router will handle redirect
+        } catch (error) {
+            console.error("Failed to log out", error);
+        }
     }
 
     return (
@@ -43,9 +51,14 @@ export default function StudentDashboard() {
             <header className="relative z-10 flex flex-col sm:flex-row justify-between items-center mb-8">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-800">Student Dashboard</h1>
-                    <p className="text-slate-500 mt-1">Welcome, {ariseUser.displayName || 'Student'}! Let the learning adventure begin.</p>
+                    <p className="text-slate-500 mt-1">Welcome, {userProfile?.displayName || 'Student'}! Let the learning adventure begin.</p>
                 </div>
                 <div className="flex items-center gap-4 mt-4 sm:mt-0">
+                                        {!isOnline && (
+                                            <span className="text-sm font-medium text-amber-700 bg-amber-100 px-3 py-1 rounded-full">
+                                                Offline Mode
+                                            </span>
+                                        )}
                     <SwitchRole />
                     <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg shadow-sm hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors">
                         <LogoutIcon />

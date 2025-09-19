@@ -38,10 +38,7 @@ function App() {
     };
   }, []);
 
-  // Show offline message when the user is offline
-  if (!isOnline) {
-    return <OfflineFallback />;
-  }
+
 
   return (
     <Router>
@@ -50,27 +47,16 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route 
             path="/dashboard/school" 
-            element={
-              <PrivateRoute>
-                <SchoolDashboard />
-              </PrivateRoute>
-            } 
+            element={<PrivateRoute><SchoolDashboard isOnline={isOnline} /></PrivateRoute>} 
+
           />
           <Route 
             path="/dashboard/staff" 
-            element={
-              <PrivateRoute>
-                <StaffDashboard />
-              </PrivateRoute>
-            } 
+            element={<PrivateRoute><StaffDashboard isOnline={isOnline} /></PrivateRoute>} 
           />
           <Route 
             path="/dashboard/student" 
-            element={
-              <PrivateRoute>
-                <StudentDashboard />
-              </PrivateRoute>
-            } 
+            element={<PrivateRoute><StudentDashboard isOnline={isOnline} /></PrivateRoute>} 
           />
           <Route path="/" element={<Navigate to="/login" />} />
         </Routes>

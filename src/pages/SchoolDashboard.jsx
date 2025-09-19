@@ -31,7 +31,7 @@ const Card = ({ title, icon, children, className }) => (
     </div>
 );
 
-function SchoolDashboard() {
+function SchoolDashboard({ isOnline }) {
     const [newUser, setNewUser] = useState({ email: '', displayName: '', role: 'staff' });
     const [userAddLoading, setUserAddLoading] = useState(false);
     const navigate = useNavigate();
@@ -138,9 +138,14 @@ function SchoolDashboard() {
                             <h1 className="text-2xl font-bold">School Dashboard</h1>
                         </div>
                         <div className="flex gap-2 w-full sm:w-auto justify-end items-center">
-                                                    <div style={{ position: 'relative', zIndex: 50 }}>
-                                                        <SwitchRole />
-                                                    </div>
+                           {!isOnline && (
+                              <span className="text-sm font-medium text-amber-700 bg-amber-100 px-3 py-1 rounded-full">
+                                Offline Mode
+                              </span>
+                            )}
+                            <div style={{ position: 'relative', zIndex: 50 }}>
+                                <SwitchRole />
+                            </div>
                             <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg shadow-sm hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors">
                                 <LogoutIcon />
                                 <span>Logout</span>

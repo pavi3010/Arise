@@ -6,7 +6,7 @@ export async function logOut() {
   await signOut(auth);
   localStorage.removeItem('ariseUser');
 }
-import { getFirestore, doc, getDoc, setDoc, getDocs, collection } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, getDocs, collection, initializeFirestore, persistentLocalCache, memoryLocalCache } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCuMsPe44bdghEH7zGUEP0H-0v9HX7lS24",
@@ -20,8 +20,20 @@ const firebaseConfig = {
 };
 
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+
+export const db = initializeFirestore(app, {
+  // Use persistent cache for offline support
+  localCache: persistentLocalCache({
+    // Specify the size of the cache in bytes.
+    // Default is 40 MB. You can adjust this value.
+    cacheSizeBytes: 104857600, // 100 MB
+  }),
+  // For multi-tab support, you can also configure a memory cache
+  // for the primary tab to share state with secondary tabs.
+  // localCache: memoryLocalCache(/* settings */) 
+});
+
 export const auth = getAuth(app);
-export const db = getFirestore(app);
 
 const provider = new GoogleAuthProvider();
 
