@@ -3,6 +3,7 @@ import { signInWithGoogle, checkUserExists, createUserInFirestore } from '../fir
 import { createSchool } from '../services/school.service';
 import CompleteProfile from './CompleteProfile';
 import { useNavigate } from 'react-router-dom';
+import {  useAuth } from '../contexts/AuthContext';
 
 const SchoolIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-indigo-500" viewBox="0 0 20 20" fill="currentColor">
