@@ -50,8 +50,8 @@ export default function CompleteProfile({ userType = '', onComplete }) {
     }
     
     if (form.userType === 'staff') {
-      if (!form.schoolId || !form.subject) {
-        setError('Please select a school and subject.');
+        if (!form.schoolId) {
+          setError('Please select a school.');
         setLoading(false);
         return;
       }
@@ -119,7 +119,7 @@ export default function CompleteProfile({ userType = '', onComplete }) {
   // School Registration Form
   if (form.userType === 'school') {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+  <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-white">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(0,0,0,0.05)_1px,transparent_0)] bg-[size:20px_20px]"></div>
         </div>
@@ -129,7 +129,7 @@ export default function CompleteProfile({ userType = '', onComplete }) {
           <Building className="w-5 h-5 text-white" />
         </div>
         
-        <div className="relative z-10 w-full max-w-lg">
+  <div className="relative z-10 w-full max-w-lg max-h-screen overflow-y-auto p-2 sm:p-4 md:p-6 lg:p-8 rounded-3xl">
           {/* Header Card */}
           <div className={`bg-white/70 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-8 mb-6 relative overflow-hidden`}>
             <div className={`absolute inset-0 bg-gradient-to-br ${roleConfig.bgGradient} opacity-30`}></div>
@@ -232,16 +232,79 @@ export default function CompleteProfile({ userType = '', onComplete }) {
               <p className="text-gray-600">{roleConfig.subtitle}</p>
             </div>
           </div>
-          {/* ...existing staff form code... */}
+          {/* Staff Form Card */}
+          <form className="bg-white/70 backdrop-blur-xl shadow-xl border border-white/20 p-6 sm:p-8 rounded-3xl" onSubmit={handleSubmit} style={{ maxHeight: '80vh', overflowY: 'auto' }}>
+            <div className="space-y-6">
+              <div>
+                <label className="flex items-center text-sm font-semibold text-gray-700 mb-3">
+                  <School className="w-4 h-4 mr-2" />
+                  Select School
+                </label>
+                <select
+                  name="schoolId"
+                  value={form.schoolId}
+                  onChange={handleChange}
+                  required
+                  className="w-full px-4 py-4 bg-white/80 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all shadow-sm"
+                >
+                  <option value="">Select your school</option>
+                  {schools.map(school => (
+                    <option key={school.id} value={school.id}>{school.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="flex items-center text-sm font-semibold text-gray-700 mb-3">
+                  <User className="w-4 h-4 mr-2" />
+                  Your Name
+                </label>
+                <input
+                  name="name"
+                  type="text"
+                  value={form.name}
+                  onChange={handleChange}
+                  required
+                  placeholder="Enter your name"
+                  className="w-full px-4 py-4 bg-white/80 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all shadow-sm"
+                />
+              </div>
+              {error && (
+                <div className="flex items-center p-4 bg-red-50/80 border border-red-200 rounded-2xl text-red-600">
+                  <AlertCircle className="w-5 h-5 mr-2" />
+                  <span className="font-medium">{error}</span>
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={loading}
+                className={`w-full bg-gradient-to-r ${roleConfig.gradient} text-white py-4 px-6 rounded-2xl font-semibold hover:shadow-lg transform hover:scale-[1.02] transition-all duration-200 shadow-md disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                <div className="flex items-center justify-center space-x-2">
+                  {loading ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Registering...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-5 h-5" />
+                      <span>Complete Teacher Registration</span>
+                    </>
+                  )}
+                </div>
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     );
   }
 
+
   // Student Registration Form
   if (form.userType === 'student') {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+  <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-white">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(0,0,0,0.05)_1px,transparent_0)] bg-[size:20px_20px]"></div>
         </div>
@@ -249,7 +312,7 @@ export default function CompleteProfile({ userType = '', onComplete }) {
         <div className="absolute top-20 right-20 p-3 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl shadow-lg transform rotate-12">
           <Sparkles className="w-5 h-5 text-white" />
         </div>
-        <div className="relative z-10 w-full max-w-lg">
+  <div className="relative z-10 w-full max-w-lg max-h-screen overflow-y-auto p-2 sm:p-4 md:p-6 lg:p-8 rounded-3xl">
           {/* Header Card */}
           <div className={`bg-white/70 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-8 mb-6 relative overflow-hidden`}>
             <div className={`absolute inset-0 bg-gradient-to-br ${roleConfig.bgGradient} opacity-30`}></div>
@@ -262,7 +325,7 @@ export default function CompleteProfile({ userType = '', onComplete }) {
             </div>
           </div>
           {/* Form Card */}
-          <div className="bg-white/70 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-8">
+          <form className="bg-white/70 backdrop-blur-xl shadow-xl border border-white/20 p-6 sm:p-8 rounded-3xl" onSubmit={handleSubmit} style={{ maxHeight: '80vh', overflowY: 'auto' }}>
             <div className="space-y-6">
               <div>
                 <label className="flex items-center text-sm font-semibold text-gray-700 mb-3">
@@ -297,16 +360,33 @@ export default function CompleteProfile({ userType = '', onComplete }) {
                   className="w-full px-4 py-4 bg-white/80 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-sm"
                 />
               </div>
-              {error && <div className="text-red-600 text-sm font-medium mt-2 flex items-center"><AlertCircle className="w-4 h-4 mr-1" />{error}</div>}
+              {error && (
+                <div className="flex items-center p-4 bg-red-50/80 border border-red-200 rounded-2xl text-red-600">
+                  <AlertCircle className="w-5 h-5 mr-2" />
+                  <span className="font-medium">{error}</span>
+                </div>
+              )}
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 mt-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-bold rounded-2xl shadow-lg hover:from-blue-600 hover:to-indigo-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                className={`w-full bg-gradient-to-r ${roleConfig.gradient} text-white py-4 px-6 rounded-2xl font-semibold hover:shadow-lg transform hover:scale-[1.02] transition-all duration-200 shadow-md disabled:opacity-50 disabled:cursor-not-allowed`}
               >
-                {loading ? 'Submitting...' : 'Complete Registration'}
+                <div className="flex items-center justify-center space-x-2">
+                  {loading ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Submitting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-5 h-5" />
+                      <span>Complete Registration</span>
+                    </>
+                  )}
+                </div>
               </button>
             </div>
-          </div>
+          </form>
         </div>
       </div>
     );
@@ -316,7 +396,7 @@ export default function CompleteProfile({ userType = '', onComplete }) {
   // Student Registration Form
   if (form.userType === 'student') {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+  <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-white">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(0,0,0,0.05)_1px,transparent_0)] bg-[size:20px_20px]"></div>
         </div>
@@ -325,7 +405,7 @@ export default function CompleteProfile({ userType = '', onComplete }) {
           <GraduationCap className="w-5 h-5 text-white" />
         </div>
         
-        <div className="relative z-10 w-full max-w-lg">
+  <div className="relative z-10 w-full max-w-lg max-h-screen overflow-y-auto p-2 sm:p-4 md:p-6 lg:p-8 rounded-3xl">
           {/* Header Card */}
           <div className={`bg-white/70 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-8 mb-6 relative overflow-hidden`}>
             <div className={`absolute inset-0 bg-gradient-to-br ${roleConfig.bgGradient} opacity-30`}></div>
@@ -339,7 +419,7 @@ export default function CompleteProfile({ userType = '', onComplete }) {
           </div>
 
           {/* Form Card */}
-          <div className="bg-white/70 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-8">
+          <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-white/20 p-6 sm:p-8 rounded-3xl" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
             <div className="space-y-6">
               <div>
                 <label className="flex items-center text-sm font-semibold text-gray-700 mb-3">

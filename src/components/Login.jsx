@@ -37,17 +37,7 @@ function Login() {
   const location = useLocation();
 
   useEffect(() => {
-    // Only redirect if userProfile and userType are present, online, and loading is false
-    if (!loading && isOnline && currentUser && userProfile && userProfile.userType) {
-      const dashboardPath =
-        userProfile.userType === 'school' ? '/dashboard/school'
-        : (userProfile.userType === 'staff' || userProfile.userType === 'teacher') ? '/dashboard/staff'
-        : userProfile.userType === 'student' ? '/dashboard/student'
-        : '/dashboard';
-      if (location.pathname !== dashboardPath) {
-        navigate(dashboardPath, { replace: true });
-      }
-    }
+    // Do not auto-redirect after login. Always show role selection so user can register for new roles.
     // If offline, do not auto-redirect; let user choose role or login
   }, [loading, isOnline, currentUser, userProfile, location.pathname, navigate]);
 
@@ -77,11 +67,13 @@ function Login() {
   function handleRoleSelect(role) {
     setSelectedRole(role);
     if (pendingUser && pendingUser.roles && pendingUser.roles.includes(role)) {
+      // User already has this role, go directly to dashboard for that role
       if (isOnline) {
         redirectToDashboard(role);
       }
-      // If offline, do not redirect; let offline logic handle UI
+      setShowCompleteProfile(false);
     } else {
+      // User does not have this role, show registration
       setShowCompleteProfile(true);
     }
   }
@@ -127,7 +119,40 @@ function Login() {
 
 
 
-  if (pendingUser && (!selectedRole || showCompleteProfile)) {
+  if (pendingUser) {
+    // If user has not selected a role yet, or just logged in, show role selection
+    if (!selectedRole && !showCompleteProfile) {
+      const allRoles = [
+        { key: 'student', name: 'Student', icon: <StudentIcon />, description: "Let's start learning!" },
+        { key: 'staff', name: 'Staff / Teacher', icon: <StaffIcon />, description: 'Manage and teach.' },
+        { key: 'school', name: 'School Admin', icon: <SchoolIcon />, description: 'Administer your school.' },
+      ];
+      return (
+        <PageWrapper>
+          <h1 className="text-3xl font-bold text-center text-slate-800">Select Your Role</h1>
+          <p className="text-center text-slate-500 pb-4">How will you be using the Arise platform?</p>
+          <div className="flex flex-col gap-4">
+            {allRoles.map(role => (
+              <button 
+                key={role.key} 
+                onClick={() => handleRoleSelect(role.key)} 
+                className="group flex items-center w-full p-4 space-x-4 text-left bg-white/70 rounded-2xl shadow-md border-2 border-transparent hover:border-indigo-500 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+              >
+                <div className="flex-shrink-0">{role.icon}</div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-800">{role.name}</h2>
+                  <p className="text-sm text-slate-600">{role.description}</p>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-400 ml-auto transform group-hover:text-indigo-600 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            ))}
+          </div>
+        </PageWrapper>
+      );
+    }
+    // If user selected a role and needs to register for it
     if (showCompleteProfile) {
       return (
         <PageWrapper>
@@ -139,37 +164,6 @@ function Login() {
         </PageWrapper>
       );
     }
-    
-    const allRoles = [
-        { key: 'student', name: 'Student', icon: <StudentIcon />, description: "Let's start learning!" },
-        { key: 'staff', name: 'Staff / Teacher', icon: <StaffIcon />, description: 'Manage and teach.' },
-        { key: 'school', name: 'School Admin', icon: <SchoolIcon />, description: 'Administer your school.' },
-    ];
-    
-    return (
-      <PageWrapper>
-        <h1 className="text-3xl font-bold text-center text-slate-800">Select Your Role</h1>
-        <p className="text-center text-slate-500 pb-4">How will you be using the Arise platform?</p>
-        <div className="flex flex-col gap-4">
-          {allRoles.map(role => (
-            <button 
-              key={role.key} 
-              onClick={() => handleRoleSelect(role.key)} 
-              className="group flex items-center w-full p-4 space-x-4 text-left bg-white/70 rounded-2xl shadow-md border-2 border-transparent hover:border-indigo-500 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-            >
-              <div className="flex-shrink-0">{role.icon}</div>
-              <div>
-                <h2 className="text-lg font-bold text-slate-800">{role.name}</h2>
-                <p className="text-sm text-slate-600">{role.description}</p>
-              </div>
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-400 ml-auto transform group-hover:text-indigo-600 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          ))}
-        </div>
-      </PageWrapper>
-    );
   }
 
   return (
