@@ -3,6 +3,7 @@ import { signInWithGoogle, checkUserExists, createUserInFirestore } from '../fir
 import { createSchool } from '../services/school.service';
 import CompleteProfile from './CompleteProfile';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { useAuth } from '../contexts/AuthContext';
 
 const SchoolIcon = () => (
@@ -33,12 +34,12 @@ function Login() {
   const [userType, setUserType] = useState('');
   const navigate = useNavigate();
   const { currentUser, userProfile } = useAuth();
+  const isOnline = useOnlineStatus();
   const location = useLocation();
 
   useEffect(() => {
-    // Only redirect if userProfile and userType are present
-    if (currentUser && userProfile && userProfile.userType) {
-      // Prevent redirect loop: only redirect if not already on the correct dashboard
+    // Only redirect if userProfile and userType are present and online
+    if (isOnline && currentUser && userProfile && userProfile.userType) {
       const dashboardPath =
         userProfile.userType === 'school' ? '/dashboard/school'
         : (userProfile.userType === 'staff' || userProfile.userType === 'teacher') ? '/dashboard/staff'
@@ -48,8 +49,8 @@ function Login() {
         navigate(dashboardPath, { replace: true });
       }
     }
-    // If user is logged in but no userProfile/userType, let onboarding/profile complete UI show
-  }, [currentUser, userProfile, location.pathname, navigate]);
+    // If offline, do not auto-redirect; let user choose role or login
+  }, [isOnline, currentUser, userProfile, location.pathname, navigate]);
 
   function redirectToDashboard(role) {
     if (role === 'school') navigate('/dashboard/school');
@@ -79,9 +80,13 @@ function Login() {
 
   function handleRoleSelect(role) {
     setSelectedRole(role);
+    // Only use localStorage for reading when offline
     if (pendingUser && pendingUser.roles && pendingUser.roles.includes(role)) {
       localStorage.setItem('ariseUser', JSON.stringify({ ...pendingUser, userType: role }));
-      redirectToDashboard(role);
+      if (isOnline) {
+        redirectToDashboard(role);
+      }
+      // If offline, do not redirect; let offline logic handle UI
     } else {
       setShowCompleteProfile(true);
     }
@@ -109,7 +114,10 @@ function Login() {
     await createUserInFirestore(pendingUser.uid, userDoc);
     localStorage.setItem('ariseUser', JSON.stringify(userDoc));
     setShowCompleteProfile(false);
-    redirectToDashboard(formData.userType);
+    if (isOnline) {
+      redirectToDashboard(formData.userType);
+    }
+    // If offline, do not redirect; let offline logic handle UI
   }
 
   const PageWrapper = ({ children }) => (
@@ -123,6 +131,22 @@ function Login() {
         </div>
     </div>
   );
+
+  // If offline, try to read from localStorage for offline login/role selection
+  if (!isOnline && !currentUser) {
+    // Offline, not logged in: try to use localStorage for offline user
+    const ariseUser = JSON.parse(localStorage.getItem('ariseUser') || '{}');
+    if (ariseUser && ariseUser.userType) {
+      // Optionally, you could show a minimal dashboard or offline message here
+      return (
+        <PageWrapper>
+          <h1 className="text-2xl font-bold text-center text-slate-800">Offline Mode</h1>
+          <p className="text-center text-slate-500 pb-4">You are offline. Limited access is available.</p>
+          <p className="text-center text-slate-500 pb-4">Welcome back, {ariseUser.displayName || ariseUser.email || 'User'} ({ariseUser.userType})</p>
+        </PageWrapper>
+      );
+    }
+  }
 
   if (pendingUser && (!selectedRole || showCompleteProfile)) {
     if (showCompleteProfile) {
