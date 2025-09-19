@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import SwitchRole from '../components/SwitchRole';
 import {
   addSchoolGrade,
@@ -43,8 +44,8 @@ function SchoolDashboard({ isOnline }) {
     const [subjectInputs, setSubjectInputs] = useState({});
     const [inchargeInputs, setInchargeInputs] = useState({});
     const [loading, setLoading] = useState(false);
-    const ariseUser = JSON.parse(localStorage.getItem('ariseUser') || '{"schoolId": null, "displayName":"Admin"}');
-    const schoolId = ariseUser.schoolId;
+    const { userProfile } = useAuth();
+    const schoolId = userProfile?.schoolId;
 
     async function refreshData() {
         if (!schoolId) return;
@@ -66,7 +67,6 @@ function SchoolDashboard({ isOnline }) {
     }, [schoolId]);
 
     function handleLogout() {
-        localStorage.removeItem('ariseUser');
         navigate('/login');
     }
 
@@ -131,7 +131,7 @@ function SchoolDashboard({ isOnline }) {
             <header className="relative z-10 flex flex-col sm:flex-row justify-between items-center mb-8">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-800">School Dashboard</h1>
-                    <p className="text-slate-500 mt-1">Welcome back, {ariseUser.displayName}!</p>
+                    <p className="text-slate-500 mt-1">Welcome back, {userProfile?.displayName || ''}!</p>
                 </div>
                     <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2">
                         <div className="flex items-center gap-2 w-full sm:w-auto">

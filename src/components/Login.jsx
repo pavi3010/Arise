@@ -80,9 +80,7 @@ function Login() {
 
   function handleRoleSelect(role) {
     setSelectedRole(role);
-    // Only use localStorage for reading when offline
     if (pendingUser && pendingUser.roles && pendingUser.roles.includes(role)) {
-      localStorage.setItem('ariseUser', JSON.stringify({ ...pendingUser, userType: role }));
       if (isOnline) {
         redirectToDashboard(role);
       }
@@ -112,7 +110,6 @@ function Login() {
       schoolId: schoolId
     };
     await createUserInFirestore(pendingUser.uid, userDoc);
-    localStorage.setItem('ariseUser', JSON.stringify(userDoc));
     setShowCompleteProfile(false);
     if (isOnline) {
       redirectToDashboard(formData.userType);
@@ -132,21 +129,7 @@ function Login() {
     </div>
   );
 
-  // If offline, try to read from localStorage for offline login/role selection
-  if (!isOnline && !currentUser) {
-    // Offline, not logged in: try to use localStorage for offline user
-    const ariseUser = JSON.parse(localStorage.getItem('ariseUser') || '{}');
-    if (ariseUser && ariseUser.userType) {
-      // Optionally, you could show a minimal dashboard or offline message here
-      return (
-        <PageWrapper>
-          <h1 className="text-2xl font-bold text-center text-slate-800">Offline Mode</h1>
-          <p className="text-center text-slate-500 pb-4">You are offline. Limited access is available.</p>
-          <p className="text-center text-slate-500 pb-4">Welcome back, {ariseUser.displayName || ariseUser.email || 'User'} ({ariseUser.userType})</p>
-        </PageWrapper>
-      );
-    }
-  }
+
 
   if (pendingUser && (!selectedRole || showCompleteProfile)) {
     if (showCompleteProfile) {

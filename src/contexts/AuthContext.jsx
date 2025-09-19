@@ -21,10 +21,7 @@ export function AuthProvider({ children }) {
       if (user) {
         const profile = await checkUserExists(user.uid); // Fetch profile from Firestore
         setUserProfile(profile);
-        // Sync localStorage just once on login for role switching, but don't rely on it elsewhere
-        if (profile) {
-          localStorage.setItem('ariseUser', JSON.stringify(profile));
-        }
+        // No localStorage logic; rely only on context/profile
       } else {
         setUserProfile(null); // Clear profile on logout
       }

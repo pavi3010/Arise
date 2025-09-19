@@ -4,7 +4,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/
 // Log out the current user
 export async function logOut() {
   await signOut(auth);
-  localStorage.removeItem('ariseUser');
+  // Removed localStorage logic
 }
 import { getFirestore, doc, getDoc, setDoc, getDocs, collection, initializeFirestore, persistentLocalCache, memoryLocalCache } from 'firebase/firestore';
 

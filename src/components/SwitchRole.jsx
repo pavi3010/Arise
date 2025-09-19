@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function SwitchRole() {
   const [show, setShow] = useState(false);
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem('ariseUser') || '{}');
-  const roles = user.roles || [];
-  const currentRole = user.userType;
+  const { userProfile } = useAuth();
+  const roles = userProfile?.roles || [];
+  const currentRole = userProfile?.userType;
 
   function handleSwitch(role) {
-    localStorage.setItem('ariseUser', JSON.stringify({ ...user, userType: role }));
+  // Removed localStorage logic for role switching
     setShow(false);
     if (role === 'school') navigate('/dashboard/school');
     else if (role === 'staff' || role === 'teacher') navigate('/dashboard/staff');
