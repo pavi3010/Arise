@@ -24,13 +24,9 @@ const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 export const db = initializeFirestore(app, {
   // Use persistent cache for offline support
   localCache: persistentLocalCache({
-    // Specify the size of the cache in bytes.
     // Default is 40 MB. You can adjust this value.
     cacheSizeBytes: 104857600, // 100 MB
   }),
-  // For multi-tab support, you can also configure a memory cache
-  // for the primary tab to share state with secondary tabs.
-  // localCache: memoryLocalCache(/* settings */) 
 });
 
 export const auth = getAuth(app);

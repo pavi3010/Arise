@@ -26,20 +26,19 @@ const StudentIcon = () => (
 
 function Login() {
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
   const [showCompleteProfile, setShowCompleteProfile] = useState(false);
   const [pendingUser, setPendingUser] = useState(null);
   const [userRoles, setUserRoles] = useState([]);
   const [selectedRole, setSelectedRole] = useState('');
   const [userType, setUserType] = useState('');
   const navigate = useNavigate();
-  const { currentUser, userProfile } = useAuth();
+  const { currentUser, userProfile, loading } = useAuth();
   const isOnline = useOnlineStatus();
   const location = useLocation();
 
   useEffect(() => {
-    // Only redirect if userProfile and userType are present and online
-    if (isOnline && currentUser && userProfile && userProfile.userType) {
+    // Only redirect if userProfile and userType are present, online, and loading is false
+    if (!loading && isOnline && currentUser && userProfile && userProfile.userType) {
       const dashboardPath =
         userProfile.userType === 'school' ? '/dashboard/school'
         : (userProfile.userType === 'staff' || userProfile.userType === 'teacher') ? '/dashboard/staff'
@@ -50,7 +49,7 @@ function Login() {
       }
     }
     // If offline, do not auto-redirect; let user choose role or login
-  }, [isOnline, currentUser, userProfile, location.pathname, navigate]);
+  }, [loading, isOnline, currentUser, userProfile, location.pathname, navigate]);
 
   function redirectToDashboard(role) {
     if (role === 'school') navigate('/dashboard/school');
@@ -63,7 +62,6 @@ function Login() {
   async function handleGoogleSignIn() {
     try {
       setError('');
-      setLoading(true);
       const user = await signInWithGoogle();
       if (!user) return;
       const userDoc = await checkUserExists(user.uid);
@@ -73,8 +71,6 @@ function Login() {
     } catch (error) {
       setError('Failed to sign in with Google');
       console.error(error);
-    } finally {
-      setLoading(false);
     }
   }
 

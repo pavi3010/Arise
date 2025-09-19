@@ -1,3 +1,5 @@
+import { db } from '../firebase';
+import { collection, doc, setDoc, getDoc, getDocs, addDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 // Add a student to a section (by incharge faculty)
 export async function addSectionStudent(schoolId, gradeId, sectionId, studentData) {
   // studentData should include at least: { id, displayName, email, ... }
@@ -30,8 +32,6 @@ export async function getSectionIncharge(schoolId, gradeId, sectionId) {
   if (!sectionSnap.exists()) return null;
   return sectionSnap.data().incharge || null;
 }
-import { db } from '../firebase';
-import { collection, doc, setDoc, getDoc, getDocs, addDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 
 // Create a new school
 export async function createSchool(schoolData) {
