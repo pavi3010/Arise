@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { signInWithGoogle, checkUserExists, createUserInFirestore } from '../firebase';
 import { createSchool } from '../services/school.service';
 import CompleteProfile from './CompleteProfile';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 const SchoolIcon = () => (
@@ -33,14 +33,23 @@ function Login() {
   const [userType, setUserType] = useState('');
   const navigate = useNavigate();
   const { currentUser, userProfile } = useAuth();
+  const location = useLocation();
 
   useEffect(() => {
     // Only redirect if userProfile and userType are present
     if (currentUser && userProfile && userProfile.userType) {
-      redirectToDashboard(userProfile.userType);
+      // Prevent redirect loop: only redirect if not already on the correct dashboard
+      const dashboardPath =
+        userProfile.userType === 'school' ? '/dashboard/school'
+        : (userProfile.userType === 'staff' || userProfile.userType === 'teacher') ? '/dashboard/staff'
+        : userProfile.userType === 'student' ? '/dashboard/student'
+        : '/dashboard';
+      if (location.pathname !== dashboardPath) {
+        navigate(dashboardPath, { replace: true });
+      }
     }
     // If user is logged in but no userProfile/userType, let onboarding/profile complete UI show
-  }, [currentUser, userProfile]);
+  }, [currentUser, userProfile, location.pathname, navigate]);
 
   function redirectToDashboard(role) {
     if (role === 'school') navigate('/dashboard/school');
@@ -49,10 +58,6 @@ function Login() {
     else navigate('/dashboard');
   }
 
-  function handleUserTypeChange(type) {
-    setUserType(type);
-    setError('');
-  }
 
   async function handleGoogleSignIn() {
     try {
