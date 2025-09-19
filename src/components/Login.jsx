@@ -3,7 +3,7 @@ import { signInWithGoogle, checkUserExists, createUserInFirestore } from '../fir
 import { createSchool } from '../services/school.service';
 import CompleteProfile from './CompleteProfile';
 import { useNavigate } from 'react-router-dom';
-import {  useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 
 const SchoolIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-indigo-500" viewBox="0 0 20 20" fill="currentColor">
@@ -32,18 +32,15 @@ function Login() {
   const [selectedRole, setSelectedRole] = useState('');
   const [userType, setUserType] = useState('');
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  const { currentUser, userProfile } = useAuth();
 
   useEffect(() => {
-    if (currentUser) {
-      // User is already logged in, so redirect to their dashboard
-      const ariseUser = JSON.parse(localStorage.getItem('ariseUser') || '{}');
-      const role = ariseUser.userType;
-      if (role) {
-        redirectToDashboard(role);
-      }
+    // Only redirect if userProfile and userType are present
+    if (currentUser && userProfile && userProfile.userType) {
+      redirectToDashboard(userProfile.userType);
     }
-  }, [currentUser]);
+    // If user is logged in but no userProfile/userType, let onboarding/profile complete UI show
+  }, [currentUser, userProfile]);
 
   function redirectToDashboard(role) {
     if (role === 'school') navigate('/dashboard/school');

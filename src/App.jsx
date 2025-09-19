@@ -5,7 +5,6 @@ import Login from './components/Login';
 import SchoolDashboard from './pages/SchoolDashboard';
 import StaffDashboard from './pages/StaffDashboard';
 import StudentDashboard from './pages/StudentDashboard';
-import OfflineFallback from './components/OfflineFallback';
 import './App.css';
 
 // Protected route component
