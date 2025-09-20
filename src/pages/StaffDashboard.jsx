@@ -5,7 +5,7 @@ import SwitchRole from '../components/SwitchRole';
 import { useAuth } from '../contexts/AuthContext';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { logOut } from '../firebase';
-import { getSchoolGrades, getGradeSections, addSectionStudent } from '../services/school.service';
+import { getSchoolGrades, getGradeSections, addSectionStudent, getSchoolUsers, getSectionStudents } from '../services/school.service';
 
 // --- Helper Icon Components ---
 const PlusIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" /></svg>;
@@ -35,6 +35,8 @@ export default function StaffDashboard() {
     const [sections, setSections] = useState({});
     const [studentInputs, setStudentInputs] = useState({});
     const [loading, setLoading] = useState(false);
+    const [pendingStudents, setPendingStudents] = useState([]);
+    const [users, setUsers] = useState([]);
     const schoolId = userProfile?.schoolId;
     const userId = userProfile?.id;
 
@@ -47,38 +49,99 @@ export default function StaffDashboard() {
     }
 
     // Fetch grades and sections on mount
+    // Fetch grades, sections, and users on mount
     useEffect(() => {
         if (!schoolId) return;
-        getSchoolGrades(schoolId).then(async gradesList => {
-            setGrades(gradesList);
-            const allSections = {};
-            for (const grade of gradesList) {
-                allSections[grade.id] = await getGradeSections(schoolId, grade.id);
-            }
-            setSections(allSections);
-        });
+        setLoading(true);
+        Promise.all([
+            getSchoolGrades(schoolId).then(async gradesList => {
+                setGrades(gradesList);
+                const allSections = {};
+                for (const grade of gradesList) {
+                    allSections[grade.id] = await getGradeSections(schoolId, grade.id);
+                }
+                setSections(allSections);
+            }),
+            getSchoolUsers(schoolId).then(setUsers)
+        ]).finally(() => setLoading(false));
     }, [schoolId]);
 
-    // Add student to section
-    async function handleAddStudent(gradeId, sectionId) {
-        const { name, email } = studentInputs[sectionId] || {};
-        if (!name || !email) return;
-        setLoading(true);
-        await addSectionStudent(schoolId, gradeId, sectionId, { displayName: name, email });
-        setStudentInputs(inputs => ({ ...inputs, [sectionId]: { name: '', email: '' } }));
-        // Optionally refresh sections if you want to show student list
-        setLoading(false);
-    }
 
-    // Find all sections where current user is incharge
+    // Find all sections where current user is incharge or a subject faculty
     const inchargeSections = [];
+    const inchargeSectionIdsSet = new Set();
     grades.forEach(grade => {
         (sections[grade.id] || []).forEach(section => {
-            if (section.incharge === userId) {
-                inchargeSections.push({ grade, section });
+            // Incharge: compare as string for safety
+            let isIncharge = String(section.incharge) === String(userId);
+            // Subject faculty
+            let isSubjectFaculty = Array.isArray(section.subjects) && section.subjects.some(subj => String(subj.teacherId) === String(userId) || subj.teacherEmail === userProfile?.email);
+            if (isIncharge || isSubjectFaculty) {
+                inchargeSections.push({ grade, section, isIncharge, isSubjectFaculty });
+                inchargeSectionIdsSet.add(section.id);
             }
         });
     });
+    const inchargeSectionIds = Array.from(inchargeSectionIdsSet);
+
+    // Pending students for teacher's sections (not yet assigned to a section, but only for sections the user is incharge of)
+    useEffect(() => {
+        if (!users.length || !inchargeSections.length) return;
+        // Only incharge can see/approve invites
+        const inchargeOnlySections = inchargeSections.filter(s => s.isIncharge);
+        const pending = users.filter(u => {
+            if (!(u.roles?.includes('student') || u.role === 'student')) return false;
+            if (u.approved === false) return false;
+            // Only show if their gradeId matches a grade where user is incharge and only if not already assigned
+            return (!u.sectionId || u.sectionId === '') && inchargeOnlySections.some(({ grade }) => grade.id === u.gradeId);
+        });
+        setPendingStudents(pending);
+    }, [users, inchargeSections]);
+
+
+    // Assign a pending student to a section
+    async function handleAssignStudentToSection(student, section) {
+        setLoading(true);
+        try {
+            console.log('[DEBUG] Assigning student to section', {
+                schoolId,
+                student,
+                section,
+                sectionGradeId: section.gradeId,
+                sectionId: section.id
+            });
+            // Add student ID to section's students array
+            const addResult = await addSectionStudent(schoolId, section.gradeId, section.id, student.id);
+            console.log('[DEBUG] addSectionStudent result:', addResult);
+            // Update student's sectionId and gradeId in Firestore directly
+            const { db } = await import('../firebase');
+            const { doc, updateDoc } = await import('firebase/firestore');
+            const studentRef = doc(db, 'schools', schoolId, 'users', student.id);
+            await updateDoc(studentRef, { sectionId: section.id, gradeId: section.gradeId });
+            console.log('[DEBUG] Updated student document in Firestore with sectionId and gradeId.');
+            // Refresh users and sections
+            await Promise.all([
+                getSchoolUsers(schoolId).then(u => { console.log('[DEBUG] Refreshed users:', u); setUsers(u); }),
+                getSchoolGrades(schoolId).then(async gradesList => {
+                    setGrades(gradesList);
+                    const allSections = {};
+                    for (const grade of gradesList) {
+                        allSections[grade.id] = await getGradeSections(schoolId, grade.id);
+                    }
+                    console.log('[DEBUG] Refreshed sections:', allSections);
+                    setSections(allSections);
+                })
+            ]);
+            console.log('[DEBUG] Student assignment to section complete.');
+        } catch (error) {
+            console.error('Failed to assign student to section:', error);
+            alert('Failed to assign student to section: ' + (error?.message || error));
+        } finally {
+            setLoading(false);
+        }
+    }
+
+
 
     return (
         <div className="relative min-h-screen w-full bg-slate-50 p-4 sm:p-6 lg:p-8 overflow-y-auto">
@@ -101,42 +164,62 @@ export default function StaffDashboard() {
                                 </div>
                         </header>
 
-            <main className="relative z-10">
+            <main className="relative z-10 space-y-8">
+                {/* Pending Student Requests */}
+                <Card title="Pending Student Requests" icon={<ClipboardListIcon />}>
+                    {pendingStudents.length === 0 ? (
+                        <div className="text-center py-4 text-slate-500">No pending student requests for your grades.</div>
+                    ) : (
+                        <div className="space-y-4">
+                            {pendingStudents.map(student => (
+                                <div key={student.id} className="bg-slate-100/70 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-slate-200">
+                                    <div>
+                                        <div className="font-semibold text-slate-800">{student.displayName} <span className="text-xs text-slate-500">({student.email})</span></div>
+                                        <div className="text-sm text-slate-500">Grade: {grades.find(g => g.id === student.gradeId)?.name || student.gradeId}</div>
+                                    </div>
+                                    <div className="flex flex-col sm:flex-row gap-2 items-center">
+                                        <span className="text-xs text-slate-500">Assign to section:</span>
+                                        <select
+                                            className="bg-white border border-slate-300 rounded-lg px-2 py-1"
+                                            onChange={e => {
+                                                const sec = (sections[student.gradeId] || []).find(sec => sec.id === e.target.value);
+                                                if (sec) {
+                                                    handleAssignStudentToSection(student, { ...sec, gradeId: student.gradeId });
+                                                }
+                                            }}
+                                            defaultValue=""
+                                            disabled={loading}
+                                        >
+                                            <option value="" disabled>Select section</option>
+                                            {(sections[student.gradeId] || []).map(sec => (
+                                                <option key={sec.id} value={sec.id}>{sec.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </Card>
+
+                {/* Your Sections */}
                 <Card title="Your Sections" icon={<ClipboardListIcon />}>
                     {loading ? (
                         <p className="text-center text-slate-500">Loading your sections...</p>
                     ) : inchargeSections.length > 0 ? (
                         <div className="space-y-6">
-                            {inchargeSections.map(({ grade, section }) => (
+                            {inchargeSections.map(({ grade, section, isIncharge, isSubjectFaculty }) => (
                                 <div key={section.id} className="bg-slate-50/50 p-4 rounded-xl border border-slate-200/80">
                                     <h3 className="text-lg font-bold text-slate-700">
                                         Grade {grade.name} - Section {section.name}
                                     </h3>
-                                    <p className="text-sm text-slate-500 mb-4">Add new students to your section below.</p>
-
-                                    <form className="space-y-3 sm:space-y-0 sm:flex sm:gap-2" onSubmit={e => { e.preventDefault(); handleAddStudent(grade.id, section.id); }}>
-                                        <input
-                                            type="text"
-                                            placeholder="Student Full Name"
-                                            value={studentInputs[section.id]?.name || ''}
-                                            onChange={e => setStudentInputs(inputs => ({ ...inputs, [section.id]: { ...inputs[section.id], name: e.target.value } }))}
-                                            className="w-full flex-grow bg-white/70 border border-slate-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none transition"
-                                            disabled={loading}
-                                            required
-                                        />
-                                        <input
-                                            type="email"
-                                            placeholder="Student Email"
-                                            value={studentInputs[section.id]?.email || ''}
-                                            onChange={e => setStudentInputs(inputs => ({ ...inputs, [section.id]: { ...inputs[section.id], email: e.target.value } }))}
-                                            className="w-full flex-grow bg-white/70 border border-slate-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none transition"
-                                            disabled={loading}
-                                            required
-                                        />
-                                        <button type="submit" className="w-full sm:w-auto flex items-center justify-center px-4 py-2 text-white bg-indigo-600 rounded-lg shadow-md hover:bg-indigo-700 disabled:bg-indigo-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition" disabled={loading}>
-                                           <PlusIcon /> Student
-                                        </button>
-                                    </form>
+                                    <p className="text-sm text-slate-500 mb-4">Students in this section:</p>
+                                    <SectionStudentList 
+                                        schoolId={schoolId} 
+                                        gradeId={grade.id} 
+                                        section={section} 
+                                        canManage={isIncharge} 
+                                    />
                                 </div>
                             ))}
                         </div>
@@ -152,6 +235,75 @@ export default function StaffDashboard() {
                 </Card>
             </main>
         </div>
+    );
+}
+
+// SectionStudentList: shows students in a section and allows moving them to another section in the same grade
+function SectionStudentList({ schoolId, gradeId, section, canManage }) {
+    const [studentDetails, setStudentDetails] = React.useState([]);
+    const [moveTarget, setMoveTarget] = React.useState({});
+    const [otherSections, setOtherSections] = React.useState([]);
+
+    React.useEffect(() => {
+        // Fetch student IDs in this section
+        getSectionStudents(schoolId, gradeId, section.id).then(async (studentIds) => {
+            if (!studentIds.length) {
+                setStudentDetails([]);
+                return;
+            }
+            // Fetch user details for each student ID
+            const usersSnap = await import('../services/school.service');
+            const { getSchoolUsers } = usersSnap;
+            const allUsers = await getSchoolUsers(schoolId);
+            // Filter only those in this section
+            const details = allUsers.filter(u => studentIds.includes(u.id));
+            setStudentDetails(details);
+        });
+        getGradeSections(schoolId, gradeId).then(secs => {
+            setOtherSections(secs.filter(sec => sec.id !== section.id));
+        });
+    }, [schoolId, gradeId, section.id]);
+
+    // Only incharge can move students
+    async function handleMoveStudent(student, targetSectionId) {
+        if (!canManage || !targetSectionId) return;
+        await addSectionStudent(schoolId, gradeId, targetSectionId, student.id);
+        // Refresh this section's students after move
+        getSectionStudents(schoolId, gradeId, section.id).then(async (studentIds) => {
+            const usersSnap = await import('../services/school.service');
+            const { getSchoolUsers } = usersSnap;
+            const allUsers = await getSchoolUsers(schoolId);
+            const details = allUsers.filter(u => studentIds.includes(u.id));
+            setStudentDetails(details);
+        });
+    }
+
+    if (!studentDetails.length) return <div className="text-slate-400 text-sm">No students in this section.</div>;
+    return (
+        <ul className="divide-y divide-slate-200">
+            {studentDetails.map(student => (
+                <li key={student.id} className="flex items-center justify-between py-2">
+                    <span
+                        className="cursor-pointer hover:underline"
+                        onClick={() => alert(`Name: ${student.name || student.displayName || 'N/A'}\nEmail: ${student.email || 'N/A'}\nID: ${student.id}`)}
+                    >
+                        {student.name || student.displayName || 'Unknown'} <span className="text-xs text-slate-500">({student.email || student.id})</span>
+                    </span>
+                    {canManage ? (
+                        <select
+                            className="ml-2 bg-white border border-slate-300 rounded px-2 py-1 text-xs"
+                            value={moveTarget[student.id] || ''}
+                            onChange={e => { setMoveTarget(mt => ({ ...mt, [student.id]: e.target.value })); handleMoveStudent(student, e.target.value); }}
+                        >
+                            <option value="">Move to section...</option>
+                            {otherSections.map(sec => (
+                                <option key={sec.id} value={sec.id}>{sec.name}</option>
+                            ))}
+                        </select>
+                    ) : null}
+                </li>
+            ))}
+        </ul>
     );
 }
 

@@ -1,15 +1,30 @@
 import { db } from '../firebase';
 import { collection, doc, setDoc, getDoc, getDocs, addDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 // Add a student to a section (by incharge faculty)
-export async function addSectionStudent(schoolId, gradeId, sectionId, studentData) {
-  // studentData should include at least: { id, displayName, email, ... }
+export async function addSectionStudent(schoolId, gradeId, sectionId, studentId) {
+  // Only add the student ID to the section's students array
+  console.log('[DEBUG] addSectionStudent called with:', { schoolId, gradeId, sectionId, studentId });
   const sectionRef = doc(db, 'schools', schoolId, 'grades', gradeId, 'sections', sectionId);
   const sectionSnap = await getDoc(sectionRef);
-  if (!sectionSnap.exists()) throw new Error('Section not found');
+  if (!sectionSnap.exists()) {
+    console.error('[DEBUG] Section not found:', { schoolId, gradeId, sectionId });
+    throw new Error('Section not found');
+  }
   const sectionObj = sectionSnap.data();
-  const students = sectionObj.students || [];
-  students.push(studentData);
-  await updateDoc(sectionRef, { students });
+  console.log('[DEBUG] Section data:', sectionObj);
+  let students = sectionObj.students;
+  if (!Array.isArray(students)) {
+    console.warn('[DEBUG] Section students array was missing or not an array. Initializing to empty array.', { sectionId, students });
+    students = [];
+  }
+  if (!students.includes(studentId)) {
+    students.push(studentId);
+    console.log('[DEBUG] Updating section with new students array:', students);
+    await updateDoc(sectionRef, { students });
+    console.log('[DEBUG] Section students array updated successfully.');
+  } else {
+    console.log('[DEBUG] Student already in section students array:', studentId);
+  }
 }
 
 // Get all students in a section

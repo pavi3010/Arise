@@ -40,6 +40,7 @@ export function AuthProvider({ children }) {
   const value = {
     currentUser,
     userProfile,
+    setUserProfile, // Expose setter for manual updates
     loading
   };
 

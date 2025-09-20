@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { School, User, MapPin, GraduationCap, Users, Building, CheckCircle, AlertCircle, Sparkles } from 'lucide-react';
 
-import { getAllSchools } from '../services/school.service';
+import { getAllSchools, getSchoolGrades } from '../services/school.service';
 
 export default function CompleteProfile({ userType = '', onComplete }) {
   const [form, setForm] = useState({
@@ -10,10 +10,12 @@ export default function CompleteProfile({ userType = '', onComplete }) {
     schoolId: '',
     schoolAddress: '',
     class: '',
-    subject: ''
+    subject: '',
+    gradeId: '', // For student registration
   });
   const [error, setError] = useState('');
   const [schools, setSchools] = useState([]);
+  const [grades, setGrades] = useState([]); // For student registration
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -21,6 +23,15 @@ export default function CompleteProfile({ userType = '', onComplete }) {
       getAllSchools().then(setSchools);
     }
   }, [form.userType]);
+
+  // Fetch grades when a school is selected and userType is student
+  useEffect(() => {
+    if (form.userType === 'student' && form.schoolId) {
+      getSchoolGrades(form.schoolId).then(setGrades);
+    } else {
+      setGrades([]);
+    }
+  }, [form.userType, form.schoolId]);
 
   function handleChange(e) {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -60,6 +71,11 @@ export default function CompleteProfile({ userType = '', onComplete }) {
     if (form.userType === 'student') {
       if (!form.schoolId) {
         setError('Please select a school.');
+        setLoading(false);
+        return;
+      }
+      if (!form.gradeId) {
+        setError('Please select a grade.');
         setLoading(false);
         return;
       }
@@ -119,7 +135,7 @@ export default function CompleteProfile({ userType = '', onComplete }) {
   // School Registration Form
   if (form.userType === 'school') {
     return (
-  <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-white">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(0,0,0,0.05)_1px,transparent_0)] bg-[size:20px_20px]"></div>
         </div>
@@ -129,7 +145,7 @@ export default function CompleteProfile({ userType = '', onComplete }) {
           <Building className="w-5 h-5 text-white" />
         </div>
         
-  <div className="relative z-10 w-full max-w-lg max-h-screen overflow-y-auto p-2 sm:p-4 md:p-6 lg:p-8 rounded-3xl">
+        <div className="relative z-10 w-full max-w-lg max-h-screen overflow-y-auto p-2 sm:p-4 md:p-6 lg:p-8 rounded-3xl">
           {/* Header Card */}
           <div className={`bg-white/70 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-8 mb-6 relative overflow-hidden`}>
             <div className={`absolute inset-0 bg-gradient-to-br ${roleConfig.bgGradient} opacity-30`}></div>
@@ -143,7 +159,7 @@ export default function CompleteProfile({ userType = '', onComplete }) {
           </div>
 
           {/* Form Card */}
-          <div className="bg-white/70 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-8">
+          <form className="bg-white/70 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-8" onSubmit={handleSubmit}>
             <div className="space-y-6">
               <div>
                 <label className="flex items-center text-sm font-semibold text-gray-700 mb-3">
@@ -204,7 +220,7 @@ export default function CompleteProfile({ userType = '', onComplete }) {
                 </div>
               </button>
             </div>
-          </div>
+          </form>
         </div>
       </div>
     );
@@ -304,7 +320,7 @@ export default function CompleteProfile({ userType = '', onComplete }) {
   // Student Registration Form
   if (form.userType === 'student') {
     return (
-  <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-white">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(0,0,0,0.05)_1px,transparent_0)] bg-[size:20px_20px]"></div>
         </div>
@@ -312,7 +328,7 @@ export default function CompleteProfile({ userType = '', onComplete }) {
         <div className="absolute top-20 right-20 p-3 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl shadow-lg transform rotate-12">
           <Sparkles className="w-5 h-5 text-white" />
         </div>
-  <div className="relative z-10 w-full max-w-lg max-h-screen overflow-y-auto p-2 sm:p-4 md:p-6 lg:p-8 rounded-3xl">
+        <div className="relative z-10 w-full max-w-lg max-h-screen overflow-y-auto p-2 sm:p-4 md:p-6 lg:p-8 rounded-3xl">
           {/* Header Card */}
           <div className={`bg-white/70 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-8 mb-6 relative overflow-hidden`}>
             <div className={`absolute inset-0 bg-gradient-to-br ${roleConfig.bgGradient} opacity-30`}></div>
@@ -342,6 +358,25 @@ export default function CompleteProfile({ userType = '', onComplete }) {
                   <option value="">Select your school</option>
                   {schools.map(school => (
                     <option key={school.id} value={school.id}>{school.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="flex items-center text-sm font-semibold text-gray-700 mb-3">
+                  <GraduationCap className="w-4 h-4 mr-2" />
+                  Select Grade
+                </label>
+                <select
+                  name="gradeId"
+                  value={form.gradeId}
+                  onChange={handleChange}
+                  required
+                  className="w-full px-4 py-4 bg-white/80 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all shadow-sm"
+                  disabled={!form.schoolId || grades.length === 0}
+                >
+                  <option value="">Select your grade</option>
+                  {grades.map(grade => (
+                    <option key={grade.id} value={grade.id}>{grade.name}</option>
                   ))}
                 </select>
               </div>

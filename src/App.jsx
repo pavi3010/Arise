@@ -44,10 +44,14 @@ function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/select-role" element={<Login directRole="role" />} />
+          <Route path="/register/school" element={<Login directRole="school" />} />
+          <Route path="/register/staff" element={<Login directRole="staff" />} />
+          <Route path="/register/student" element={<Login directRole="student" />} />
+          <Route path="/select-role" element={<Login directRole="role" />} />
           <Route 
             path="/dashboard/school" 
             element={<PrivateRoute><SchoolDashboard isOnline={isOnline} /></PrivateRoute>} 
-
           />
           <Route 
             path="/dashboard/staff" 

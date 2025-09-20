@@ -6,13 +6,16 @@ import { useAuth } from '../contexts/AuthContext';
 export default function SwitchRole() {
   const [show, setShow] = useState(false);
   const navigate = useNavigate();
-  const { userProfile } = useAuth();
+  const { userProfile, setUserProfile } = useAuth();
   const roles = userProfile?.roles || [];
   const currentRole = userProfile?.userType;
 
   function handleSwitch(role) {
-  // Removed localStorage logic for role switching
     setShow(false);
+    // Update userProfile in context so the app knows the new role
+    if (setUserProfile && userProfile) {
+      setUserProfile({ ...userProfile, userType: role });
+    }
     if (role === 'school') navigate('/dashboard/school');
     else if (role === 'staff' || role === 'teacher') navigate('/dashboard/staff');
     else if (role === 'student') navigate('/dashboard/student');

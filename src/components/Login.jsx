@@ -1,16 +1,16 @@
+const SchoolIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-indigo-500" viewBox="0 0 20 20" fill="currentColor">
+    <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+  </svg>
+);
 import { useState, useEffect } from 'react';
 import { signInWithGoogle, checkUserExists, createUserInFirestore } from '../firebase';
+import { addSchoolUser } from '../services/school.service';
 import { createSchool } from '../services/school.service';
 import CompleteProfile from './CompleteProfile';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { useAuth } from '../contexts/AuthContext';
-
-const SchoolIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-indigo-500" viewBox="0 0 20 20" fill="currentColor">
-        <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
-    </svg>
-);
 
 const StaffIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-teal-500" viewBox="0 0 20 20" fill="currentColor">
@@ -24,15 +24,19 @@ const StudentIcon = () => (
     </svg>
 );
 
-function Login() {
+function Login({ directRole }) {
   const [error, setError] = useState('');
+  // If directRole is 'school', 'staff', or 'student', pre-select that role and show registration
+  // If directRole is 'role', show the role selection page
+  const [selectedRole, setSelectedRole] = useState('');
+  // Registration form is only shown on /register/role routes
   const [showCompleteProfile, setShowCompleteProfile] = useState(false);
   const [pendingUser, setPendingUser] = useState(null);
   const [userRoles, setUserRoles] = useState([]);
-  const [selectedRole, setSelectedRole] = useState('');
   const [userType, setUserType] = useState('');
   const navigate = useNavigate();
   const { currentUser, userProfile, loading } = useAuth();
+  const { setUserProfile } = useAuth(); // We'll add this to AuthContext for updating profile
   const isOnline = useOnlineStatus();
   const location = useLocation();
 
@@ -47,7 +51,6 @@ function Login() {
     else if (role === 'student') navigate('/dashboard/student');
     else navigate('/dashboard');
   }
-
 
   async function handleGoogleSignIn() {
     try {
@@ -66,15 +69,22 @@ function Login() {
 
   function handleRoleSelect(role) {
     setSelectedRole(role);
-    if (pendingUser && pendingUser.roles && pendingUser.roles.includes(role)) {
+    // Check both pendingUser.roles and userProfile.roles for the selected role
+    const hasRole = (
+      (pendingUser && Array.isArray(pendingUser.roles) && pendingUser.roles.includes(role)) ||
+      (userProfile && Array.isArray(userProfile.roles) && userProfile.roles.includes(role))
+    );
+    if (hasRole) {
       // User already has this role, go directly to dashboard for that role
       if (isOnline) {
         redirectToDashboard(role);
       }
       setShowCompleteProfile(false);
     } else {
-      // User does not have this role, show registration
-      setShowCompleteProfile(true);
+      // User does not have this role, navigate to registration route
+      if (role === 'school') navigate('/register/school');
+      else if (role === 'staff' || role === 'teacher') navigate('/register/staff');
+      else if (role === 'student') navigate('/register/student');
     }
   }
 
@@ -84,20 +94,37 @@ function Login() {
     if (!newRoles.includes(formData.userType)) newRoles.push(formData.userType);
     let schoolId = formData.schoolId;
     if (formData.userType === 'school') {
-      schoolId = await createSchool({ name: formData.name, address: formData.schoolAddress });
+      // Add adminEmail to the school document for easy lookup
+      schoolId = await createSchool({
+        name: formData.name,
+        address: formData.schoolAddress,
+        adminEmail: pendingUser.email
+      });
+      // Add user as admin to the new school's users subcollection
+      await addSchoolUser(schoolId, pendingUser.uid, {
+        ...pendingUser,
+        ...formData,
+        roles: newRoles,
+        userType: 'school',
+        schoolId: schoolId
+      });
+    } else {
+      if (formData.userType === 'staff' && !schoolId) {
+        alert('School selection required for staff');
+        return;
+      }
+      const userDoc = {
+        ...pendingUser,
+        ...formData,
+        roles: newRoles,
+        userType: formData.userType,
+        schoolId: schoolId
+      };
+      await createUserInFirestore(pendingUser.uid, userDoc);
     }
-    if (formData.userType === 'staff' && !schoolId) {
-      alert('School selection required for staff');
-      return;
-    }
-    const userDoc = {
-      ...pendingUser,
-      ...formData,
-      roles: newRoles,
-      userType: formData.userType,
-      schoolId: schoolId
-    };
-    await createUserInFirestore(pendingUser.uid, userDoc);
+    // Fetch the latest user profile and update context
+    const updatedProfile = await checkUserExists(pendingUser.uid);
+    if (setUserProfile) setUserProfile(updatedProfile);
     setShowCompleteProfile(false);
     if (isOnline) {
       redirectToDashboard(formData.userType);
@@ -119,71 +146,91 @@ function Login() {
 
 
 
-  if (pendingUser) {
-    // If user has not selected a role yet, or just logged in, show role selection
-    if (!selectedRole && !showCompleteProfile) {
-      const allRoles = [
-        { key: 'student', name: 'Student', icon: <StudentIcon />, description: "Let's start learning!" },
-        { key: 'staff', name: 'Staff / Teacher', icon: <StaffIcon />, description: 'Manage and teach.' },
-        { key: 'school', name: 'School Admin', icon: <SchoolIcon />, description: 'Administer your school.' },
-      ];
-      return (
-        <PageWrapper>
-          <h1 className="text-3xl font-bold text-center text-slate-800">Select Your Role</h1>
-          <p className="text-center text-slate-500 pb-4">How will you be using the Arise platform?</p>
-          <div className="flex flex-col gap-4">
-            {allRoles.map(role => (
-              <button 
-                key={role.key} 
-                onClick={() => handleRoleSelect(role.key)} 
-                className="group flex items-center w-full p-4 space-x-4 text-left bg-white/70 rounded-2xl shadow-md border-2 border-transparent hover:border-indigo-500 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-              >
-                <div className="flex-shrink-0">{role.icon}</div>
-                <div>
-                  <h2 className="text-lg font-bold text-slate-800">{role.name}</h2>
-                  <p className="text-sm text-slate-600">{role.description}</p>
-                </div>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-400 ml-auto transform group-hover:text-indigo-600 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            ))}
-          </div>
-        </PageWrapper>
-      );
-    }
-    // If user selected a role and needs to register for it
-    if (showCompleteProfile) {
-      return (
-        <PageWrapper>
-          <h1 className="text-3xl font-bold text-center text-slate-800">
-            Complete Your Profile
-          </h1>
-          <p className="text-center text-slate-500 pb-4">A few more details to get you started.</p>
-          <CompleteProfile userType={selectedRole || userType || 'student'} onComplete={handleCompleteProfile} />
-        </PageWrapper>
-      );
-    }
+  // Always show role selection page on /select-role, even if not signed in
+  const isSelectRoleRoute = location.pathname === '/select-role';
+  const isRegisterRoute = location.pathname.startsWith('/register/');
+  if (isSelectRoleRoute || (pendingUser && !isRegisterRoute)) {
+    const allRoles = [
+      { key: 'student', name: 'Student', icon: <StudentIcon />, description: "Let's start learning!" },
+      { key: 'staff', name: 'Staff / Teacher', icon: <StaffIcon />, description: 'Manage and teach.' },
+      { key: 'school', name: 'School Admin', icon: <SchoolIcon />, description: 'Administer your school.' },
+    ];
+    // If not signed in, clicking a role triggers Google login first
+    const handleRoleClick = async (role) => {
+      if (!pendingUser) {
+        await handleGoogleSignIn();
+        // handleGoogleSignIn will set pendingUser and re-render
+        return;
+      }
+      handleRoleSelect(role);
+    };
+    return (
+      <PageWrapper>
+        <h1 className="text-3xl font-bold text-center text-slate-800">Select Your Role</h1>
+        <p className="text-center text-slate-500 pb-4">How will you be using the Arise platform?</p>
+        <div className="flex flex-col gap-4">
+          {allRoles.map(role => (
+            <button 
+              key={role.key} 
+              onClick={() => handleRoleClick(role.key)} 
+              className="group flex items-center w-full p-4 space-x-4 text-left bg-white/70 rounded-2xl shadow-md border-2 border-transparent hover:border-indigo-500 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+            >
+              <div className="flex-shrink-0">{role.icon}</div>
+              <div>
+                <h2 className="text-lg font-bold text-slate-800">{role.name}</h2>
+                <p className="text-sm text-slate-600">{role.description}</p>
+              </div>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-400 ml-auto transform group-hover:text-indigo-600 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          ))}
+        </div>
+      </PageWrapper>
+    );
+  }
+  // Registration forms are only shown on /register/role routes
+  if (isRegisterRoute) {
+    let regRole = location.pathname.split('/').pop();
+    if (regRole === 'staff') regRole = 'staff';
+    if (regRole === 'school') regRole = 'school';
+    if (regRole === 'student') regRole = 'student';
+    return (
+      <PageWrapper>
+        <button
+          type="button"
+          onClick={() => navigate('/select-role')}
+          className="mb-4 text-indigo-600 hover:underline flex items-center"
+        >
+          <svg className="h-5 w-5 mr-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+          Back to Role Selection
+        </button>
+        <h1 className="text-3xl font-bold text-center text-slate-800">
+          Complete Your Profile
+        </h1>
+        <p className="text-center text-slate-500 pb-4">A few more details to get you started.</p>
+        <CompleteProfile userType={regRole} onComplete={handleCompleteProfile} />
+      </PageWrapper>
+    );
   }
 
+  // Default: show Google login page
   return (
     <PageWrapper>
-        <div className="flex justify-center mb-4">
-            <svg className="w-20 h-20 text-indigo-600" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M2 17L12 22L22 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round"strokeLinejoin="round"/>
-                <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-        </div>
+      <div className="flex justify-center mb-4">
+        <svg className="w-20 h-20 text-indigo-600" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M2 17L12 22L22 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round"strokeLinejoin="round"/>
+          <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
       <h1 className="text-4xl font-bold text-center text-slate-800">Arise Learning Platform</h1>
       <p className="text-center text-slate-500 mt-2">A gamified learning experience for students in Odisha</p>
-      
       {error && (
         <div className="p-3 mt-4 text-sm text-center text-red-800 bg-red-100 rounded-lg" role="alert">
-            {error}
+          {error}
         </div>
       )}
-
       <div className="pt-6">
         <button 
           onClick={handleGoogleSignIn} 
@@ -201,6 +248,10 @@ function Login() {
       </div>
     </PageWrapper>
   );
+
+
+
+
 }
 
 export default Login;
