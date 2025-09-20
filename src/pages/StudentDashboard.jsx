@@ -1,6 +1,5 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import OfflineQuiz from './OfflineQuiz';
 import SwitchRole from '../components/SwitchRole';
 import { useAuth } from '../contexts/AuthContext';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
@@ -76,8 +75,8 @@ const ActionCard = ({ title, description, icon, color, onClick, disabled = false
     }`}>
       <ChevronRightIcon />
     </div>
-  </div>
-);
+    </div>
+  );
 
 const LoadingSpinner = () => (
   <div className="flex items-center justify-center py-8">
@@ -254,11 +253,6 @@ export default function StudentDashboard() {
           </div>
         )}
 
-        {/* Offline Quiz Section */}
-        <div className="mb-12">
-          <OfflineQuiz />
-        </div>
-
         {/* Action Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-6 mb-12">
           <ActionCard
@@ -273,7 +267,7 @@ export default function StudentDashboard() {
             description="Access and manage your downloaded quizzes."
             icon={<BookOpenIcon />}
             color="bg-gradient-to-br from-blue-500 to-blue-600"
-            onClick={() => handleActionClick('offline-quizzes')}
+            onClick={() => navigate('/dashboard/student/offline-quiz')}
           />
           <ActionCard
             title="Your Progress"
@@ -293,7 +287,6 @@ export default function StudentDashboard() {
 
         {/* Information Sections */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          
           {/* Subjects and Teachers */}
           <InfoCard title="Your Subjects and Teachers">
             {loadingInfo ? (
@@ -303,15 +296,13 @@ export default function StudentDashboard() {
             ) : (
               <div className="space-y-4">
                 {subjectTeachers.map((subj, idx) => (
-                  <div key={idx} className="bg-white/60 rounded-xl shadow-sm p-4 flex items-center gap-4 hover:shadow-md transition-shadow">
-                    <div className="flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
-                      <BookOpenIcon className="w-6 h-6 text-slate-600" />
+                  <div key={idx} className="bg-white rounded-lg shadow-md p-4 flex items-center gap-4">
+                    <div className="flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center bg-slate-100">
+                      <BookOpenIcon className="w-8 h-8 text-slate-500" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-slate-800 truncate">{subj.subject}</p>
-                      <p className="text-sm text-slate-600 truncate">
-                        {subj.teacher ? `${subj.teacher.name}` : 'Teacher not assigned'}
-                      </p>
+                      <p className="text-sm font-semibold text-slate-700 truncate">{subj.subject}</p>
+                      <p className="text-xs text-slate-500 truncate">{subj.teacher ? `Teacher: ${subj.teacher.name}` : 'Teacher: Not assigned'}</p>
                     </div>
                   </div>
                 ))}
@@ -322,40 +313,23 @@ export default function StudentDashboard() {
           {/* Section Incharge */}
           <InfoCard title="Section Incharge">
             {loadingInfo ? (
-              <LoadingSpinner />
+              <LoadingSpinner/>
             ) : inchargeInfo ? (
-              <div className="bg-white/60 rounded-xl shadow-sm p-4 flex items-center gap-4">
-                <div className="flex-shrink-0 w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200">
-                  {inchargeInfo.photoURL ? (
-                    <img 
-                      src={inchargeInfo.photoURL} 
-                      alt={inchargeInfo.name} 
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        e.target.style.display = 'none';
-                        e.target.nextSibling.style.display = 'flex';
-                      }}
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <UserIcon className="w-6 h-6 text-slate-600" />
-                    </div>
-                  )}
-                  <div className="w-full h-full items-center justify-center hidden">
-                    <UserIcon className="w-6 h-6 text-slate-600" />
-                  </div>
+              <div className="bg-white rounded-lg shadow-md p-4 flex items-center gap-4">
+                <div className="flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center bg-slate-100">
+                  <img src={inchargeInfo.photoURL} alt={inchargeInfo.name} className="w-8 h-8 rounded-full" />
                 </div>
-                <div className="flex-1">
-                  <p className="font-semibold text-slate-800">{inchargeInfo.name}</p>
-                  <p className="text-sm text-slate-600">{inchargeInfo.email}</p>
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">{inchargeInfo.name}</p>
+                  <p className="text-xs text-slate-500">{inchargeInfo.email}</p>
                 </div>
               </div>
             ) : (
-              <p className="text-slate-500 text-center py-8">No incharge assigned to your section yet.</p>
+              <p className="text-slate-500">No incharge assigned to your section yet.</p>
             )}
           </InfoCard>
         </div>
-      </div>
+      </div> 
     </div>
-  );
+    );
 }

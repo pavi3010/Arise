@@ -5,6 +5,7 @@ import Login from './components/Login';
 import SchoolDashboard from './pages/SchoolDashboard';
 import StaffDashboard from './pages/StaffDashboard';
 import StudentDashboard from './pages/StudentDashboard';
+import OfflineQuiz from './pages/OfflineQuiz';
 import './App.css';
 
 // Protected route component
@@ -60,6 +61,10 @@ function App() {
           <Route 
             path="/dashboard/student" 
             element={<PrivateRoute><StudentDashboard isOnline={isOnline} /></PrivateRoute>} 
+          />
+          <Route
+            path="/dashboard/student/offline-quiz"
+            element={<PrivateRoute><OfflineQuiz /></PrivateRoute>}
           />
           <Route path="/" element={<Navigate to="/login" />} />
         </Routes>
