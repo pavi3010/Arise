@@ -39,6 +39,7 @@ export default function StaffDashboard() {
     const [users, setUsers] = useState([]);
     const schoolId = userProfile?.schoolId;
     const userId = userProfile?.id;
+    const isApproved = userProfile?.approved !== false;
 
     async function handleLogout() {
         try {
@@ -48,10 +49,9 @@ export default function StaffDashboard() {
         }
     }
 
-    // Fetch grades and sections on mount
-    // Fetch grades, sections, and users on mount
+    // Fetch grades, sections, and users on mount, but only if approved
     useEffect(() => {
-        if (!schoolId) return;
+        if (!schoolId || !isApproved) return;
         setLoading(true);
         Promise.all([
             getSchoolGrades(schoolId).then(async gradesList => {
@@ -64,42 +64,83 @@ export default function StaffDashboard() {
             }),
             getSchoolUsers(schoolId).then(setUsers)
         ]).finally(() => setLoading(false));
-    }, [schoolId]);
+    }, [schoolId, isApproved]);
 
 
     // Find all sections where current user is incharge or a subject faculty
-    const inchargeSections = [];
-    const inchargeSectionIdsSet = new Set();
-    grades.forEach(grade => {
-        (sections[grade.id] || []).forEach(section => {
-            // Incharge: compare as string for safety
-            let isIncharge = String(section.incharge) === String(userId);
-            // Subject faculty
-            let isSubjectFaculty = Array.isArray(section.subjects) && section.subjects.some(subj => String(subj.teacherId) === String(userId) || subj.teacherEmail === userProfile?.email);
-            if (isIncharge || isSubjectFaculty) {
-                inchargeSections.push({ grade, section, isIncharge, isSubjectFaculty });
-                inchargeSectionIdsSet.add(section.id);
-            }
+    // Build a list of all sections where the staff is incharge, subject teacher, or both
+    const mySections = [];
+    if (isApproved) {
+        grades.forEach(grade => {
+            (sections[grade.id] || []).forEach(section => {
+                let isIncharge = String(section.incharge) === String(userId);
+                let isSubjectFaculty = Array.isArray(section.subjects) && section.subjects.some(subj => String(subj.teacherId) === String(userId) || subj.teacherEmail === userProfile?.email);
+                if (isIncharge || isSubjectFaculty) {
+                    mySections.push({ grade, section, isIncharge, isSubjectFaculty });
+                }
+            });
         });
-    });
-    const inchargeSectionIds = Array.from(inchargeSectionIdsSet);
+    }
 
-    // Pending students for teacher's sections (not yet assigned to a section, but only for sections the user is incharge of)
+    // Section/role selection state
+    const [selectedSectionId, setSelectedSectionId] = React.useState(null);
+    const [selectedRole, setSelectedRole] = React.useState(null); // 'incharge' | 'subject' | null
+
+    // When mySections changes, reset selection
+    React.useEffect(() => {
+        if (mySections.length > 0) {
+            setSelectedSectionId(mySections[0].section.id);
+            // Prefer incharge if both, else whichever is available
+            setSelectedRole(mySections[0].isIncharge ? 'incharge' : 'subject');
+        } else {
+            setSelectedSectionId(null);
+            setSelectedRole(null);
+        }
+    }, [mySections.length]);
+
+    // Pending students for teacher's sections (approval by incharge only)
     useEffect(() => {
-        if (!users.length || !inchargeSections.length) return;
+        if (!isApproved || !users.length || !mySections.length) return;
         // Only incharge can see/approve invites
-        const inchargeOnlySections = inchargeSections.filter(s => s.isIncharge);
-        const pending = users.filter(u => {
-            if (!(u.roles?.includes('student') || u.role === 'student')) return false;
-            if (u.approved === false) return false;
-            // Only show if their gradeId matches a grade where user is incharge and only if not already assigned
-            return (!u.sectionId || u.sectionId === '') && inchargeOnlySections.some(({ grade }) => grade.id === u.gradeId);
-        });
-        setPendingStudents(pending);
-    }, [users, inchargeSections]);
+        const inchargeOnlySections = mySections.filter(s => s.isIncharge);
+        // Helper to fetch roles subcollection for a user
+        async function fetchPendingStudents() {
+            const pending = [];
+            for (const u of users) {
+                // Only check users who might be students
+                if (!(u.roles?.includes('student') || u.role === 'student' || u.userType === 'student')) continue;
+                // If root doc is already approved, skip
+                if (u.approved === true) continue;
+                // Check roles subcollection for student role
+                let roleGradeId = u.gradeId;
+                let roleApproved = u.approved;
+                try {
+                    const { getFirestore, doc, getDoc } = await import('firebase/firestore');
+                    const db = getFirestore();
+                    const roleRef = doc(db, 'schools', schoolId, 'users', u.id, 'roles', 'student');
+                    const roleSnap = await getDoc(roleRef);
+                    if (roleSnap.exists()) {
+                        const roleData = roleSnap.data();
+                        if (roleData.gradeId) roleGradeId = roleData.gradeId;
+                        if (typeof roleData.approved !== 'undefined') roleApproved = roleData.approved;
+                    }
+                } catch (err) {
+                    // Ignore Firestore errors, fallback to root doc
+                }
+                // Only show if not approved and gradeId matches a grade where user is incharge
+                if (roleApproved === false || typeof roleApproved === 'undefined') {
+                    if (inchargeOnlySections.some(({ grade }) => grade.id === roleGradeId)) {
+                        pending.push({ ...u, gradeId: roleGradeId, approved: roleApproved });
+                    }
+                }
+            }
+            setPendingStudents(pending);
+        }
+        fetchPendingStudents();
+    }, [isApproved, users, mySections, schoolId]);
 
 
-    // Assign a pending student to a section
+    // Assign a pending student to a section and approve them
     async function handleAssignStudentToSection(student, section) {
         setLoading(true);
         try {
@@ -113,12 +154,20 @@ export default function StaffDashboard() {
             // Add student ID to section's students array
             const addResult = await addSectionStudent(schoolId, section.gradeId, section.id, student.id);
             console.log('[DEBUG] addSectionStudent result:', addResult);
-            // Update student's sectionId and gradeId in Firestore directly
+            // Update student's sectionId, gradeId, and approved in Firestore directly
             const { db } = await import('../firebase');
-            const { doc, updateDoc } = await import('firebase/firestore');
+            const { doc, updateDoc, setDoc, getDoc } = await import('firebase/firestore');
             const studentRef = doc(db, 'schools', schoolId, 'users', student.id);
-            await updateDoc(studentRef, { sectionId: section.id, gradeId: section.gradeId });
-            console.log('[DEBUG] Updated student document in Firestore with sectionId and gradeId.');
+            await updateDoc(studentRef, { sectionId: section.id, gradeId: section.gradeId, approved: true });
+            // Also update the roles subcollection for student approval
+            const roleRef = doc(db, 'schools', schoolId, 'users', student.id, 'roles', 'student');
+            const roleSnap = await getDoc(roleRef);
+            if (roleSnap.exists()) {
+                await updateDoc(roleRef, { approved: true, sectionId: section.id, gradeId: section.gradeId });
+            } else {
+                await setDoc(roleRef, { approved: true, sectionId: section.id, gradeId: section.gradeId }, { merge: true });
+            }
+            console.log('[DEBUG] Updated student document and roles subcollection in Firestore with sectionId, gradeId, approved.');
             // Refresh users and sections
             await Promise.all([
                 getSchoolUsers(schoolId).then(u => { console.log('[DEBUG] Refreshed users:', u); setUsers(u); }),
@@ -132,7 +181,7 @@ export default function StaffDashboard() {
                     setSections(allSections);
                 })
             ]);
-            console.log('[DEBUG] Student assignment to section complete.');
+            console.log('[DEBUG] Student assignment to section and approval complete.');
         } catch (error) {
             console.error('Failed to assign student to section:', error);
             alert('Failed to assign student to section: ' + (error?.message || error));
@@ -143,97 +192,158 @@ export default function StaffDashboard() {
 
 
 
+    if (!isApproved) {
+        return (
+            <div className="relative min-h-screen w-full bg-slate-50 flex flex-col items-center justify-center p-8">
+                <div className="absolute top-0 left-0 -translate-x-1/3 -translate-y-1/3 w-96 h-96 bg-purple-200/30 rounded-full blur-3xl animate-blob"></div>
+                <div className="absolute bottom-0 right-0 translate-x-1/3 translate-y-1/3 w-96 h-96 bg-amber-200/30 rounded-full blur-3xl animate-blob animation-delay-4000"></div>
+                <div className="relative z-10 max-w-lg w-full bg-white/80 rounded-3xl shadow-xl border border-white/20 p-8 flex flex-col items-center">
+                    <h1 className="text-3xl font-bold text-slate-800 mb-2">Staff Dashboard</h1>
+                    <p className="text-slate-500 mb-6">Welcome, {userProfile?.displayName || ''}!</p>
+                    <div className="flex flex-col items-center gap-4">
+                        <span className="text-amber-700 bg-amber-100 px-4 py-2 rounded-full font-medium text-lg">Your account is pending approval by the school admin.</span>
+                        <span className="text-slate-500 text-center">You will be able to access your dashboard once approved.</span>
+                        <SwitchRole />
+                        <button onClick={handleLogout} className="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg shadow-sm hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">Logout</button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="relative min-h-screen w-full bg-slate-50 p-4 sm:p-6 lg:p-8 overflow-y-auto">
             <div className="absolute top-0 left-0 -translate-x-1/3 -translate-y-1/3 w-96 h-96 bg-purple-200/30 rounded-full blur-3xl animate-blob"></div>
             <div className="absolute bottom-0 right-0 translate-x-1/3 translate-y-1/3 w-96 h-96 bg-amber-200/30 rounded-full blur-3xl animate-blob animation-delay-4000"></div>
 
-                        <header className="relative z-10 flex flex-col sm:flex-row justify-between items-center mb-8">
-                                <div>
-                                        <h1 className="text-3xl font-bold text-slate-800">Staff Dashboard</h1>
-                                        <p className="text-slate-500 mt-1">Welcome, {userProfile?.displayName || ''}!</p>
-                                </div>
-                                <div className="flex items-center gap-4 mt-4 sm:mt-0">
-                                        {!isOnline && (
-                                            <span className="text-sm font-medium text-amber-700 bg-amber-100 px-3 py-1 rounded-full">
-                                                Offline Mode
-                                            </span>
-                                        )}
-                                        <SwitchRole />
-                                        <button onClick={handleLogout} className="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg shadow-sm hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">Logout</button>
-                                </div>
-                        </header>
+            <header className="relative z-10 flex flex-col sm:flex-row justify-between items-center mb-8">
+                <div>
+                    <h1 className="text-3xl font-bold text-slate-800">Staff Dashboard</h1>
+                    <p className="text-slate-500 mt-1">Welcome, {userProfile?.displayName || ''}!</p>
+                </div>
+                <div className="flex items-center gap-4 mt-4 sm:mt-0">
+                    {!isOnline && (
+                        <span className="text-sm font-medium text-amber-700 bg-amber-100 px-3 py-1 rounded-full">
+                            Offline Mode
+                        </span>
+                    )}
+                    <SwitchRole />
+                    <button onClick={handleLogout} className="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg shadow-sm hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">Logout</button>
+                </div>
+            </header>
 
-            <main className="relative z-10 space-y-8">
-                {/* Pending Student Requests */}
-                <Card title="Pending Student Requests" icon={<ClipboardListIcon />}>
-                    {pendingStudents.length === 0 ? (
-                        <div className="text-center py-4 text-slate-500">No pending student requests for your grades.</div>
-                    ) : (
-                        <div className="space-y-4">
-                            {pendingStudents.map(student => (
-                                <div key={student.id} className="bg-slate-100/70 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-slate-200">
+            {/* My Sections & Role Switcher */}
+            <Card title="Your Section Roles" icon={<ClipboardListIcon />}>
+                {mySections.length === 0 ? (
+                    <div className="text-center py-4 text-slate-500">You are not assigned to any sections.</div>
+                ) : (
+                    <div className="space-y-4">
+                        {mySections.map(({ grade, section, isIncharge, isSubjectFaculty }) => {
+                            const roles = [];
+                            if (isIncharge) roles.push('Incharge');
+                            if (isSubjectFaculty) roles.push('Subject Teacher');
+                            const isSelected = selectedSectionId === section.id;
+                            return (
+                                <div key={section.id} className={`rounded-xl p-4 border ${isSelected ? 'border-indigo-400 bg-indigo-50/40' : 'border-slate-200 bg-slate-100/70'} flex flex-col sm:flex-row sm:items-center justify-between gap-4`}>
                                     <div>
-                                        <div className="font-semibold text-slate-800">{student.displayName} <span className="text-xs text-slate-500">({student.email})</span></div>
-                                        <div className="text-sm text-slate-500">Grade: {grades.find(g => g.id === student.gradeId)?.name || student.gradeId}</div>
+                                        <div className="font-semibold text-slate-800">Grade {grade.name} - Section {section.name}</div>
+                                        <div className="text-xs text-slate-500">Roles: {roles.join(', ')}</div>
                                     </div>
-                                    <div className="flex flex-col sm:flex-row gap-2 items-center">
-                                        <span className="text-xs text-slate-500">Assign to section:</span>
-                                        <select
-                                            className="bg-white border border-slate-300 rounded-lg px-2 py-1"
-                                            onChange={e => {
-                                                const sec = (sections[student.gradeId] || []).find(sec => sec.id === e.target.value);
-                                                if (sec) {
-                                                    handleAssignStudentToSection(student, { ...sec, gradeId: student.gradeId });
-                                                }
-                                            }}
-                                            defaultValue=""
-                                            disabled={loading}
-                                        >
-                                            <option value="" disabled>Select section</option>
-                                            {(sections[student.gradeId] || []).map(sec => (
-                                                <option key={sec.id} value={sec.id}>{sec.name}</option>
-                                            ))}
-                                        </select>
+                                    <div className="flex gap-2 items-center">
+                                        {isIncharge && (
+                                            <button
+                                                className={`px-3 py-1 rounded-lg text-sm font-medium border ${isSelected && selectedRole === 'incharge' ? 'bg-indigo-500 text-white' : 'bg-white text-indigo-600 border-indigo-300'}`}
+                                                onClick={() => { setSelectedSectionId(section.id); setSelectedRole('incharge'); }}
+                                            >
+                                                Incharge
+                                            </button>
+                                        )}
+                                        {isSubjectFaculty && (
+                                            <button
+                                                className={`px-3 py-1 rounded-lg text-sm font-medium border ${isSelected && selectedRole === 'subject' ? 'bg-emerald-500 text-white' : 'bg-white text-emerald-600 border-emerald-300'}`}
+                                                onClick={() => { setSelectedSectionId(section.id); setSelectedRole('subject'); }}
+                                            >
+                                                Subject Teacher
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    )}
-                </Card>
+                            );
+                        })}
+                    </div>
+                )}
+            </Card>
 
-                {/* Your Sections */}
-                <Card title="Your Sections" icon={<ClipboardListIcon />}>
-                    {loading ? (
-                        <p className="text-center text-slate-500">Loading your sections...</p>
-                    ) : inchargeSections.length > 0 ? (
-                        <div className="space-y-6">
-                            {inchargeSections.map(({ grade, section, isIncharge, isSubjectFaculty }) => (
-                                <div key={section.id} className="bg-slate-50/50 p-4 rounded-xl border border-slate-200/80">
-                                    <h3 className="text-lg font-bold text-slate-700">
-                                        Grade {grade.name} - Section {section.name}
-                                    </h3>
-                                    <p className="text-sm text-slate-500 mb-4">Students in this section:</p>
-                                    <SectionStudentList 
-                                        schoolId={schoolId} 
-                                        gradeId={grade.id} 
-                                        section={section} 
-                                        canManage={isIncharge} 
-                                    />
+            {/* Contextual Features Panel */}
+            {selectedSectionId && selectedRole && (
+                <div className="mt-8">
+                    {selectedRole === 'incharge' ? (
+                        <Card title="Incharge Features" icon={<ClipboardListIcon />}>
+                            {/* Pending Student Requests for this section's grade only */}
+                            <div className="mb-4 font-semibold text-slate-700">Pending Student Requests (Grade {mySections.find(s => s.section.id === selectedSectionId)?.grade.name})</div>
+                            {pendingStudents.filter(s => s.gradeId === mySections.find(sec => sec.section.id === selectedSectionId)?.grade.id).length === 0 ? (
+                                <div className="text-center py-2 text-slate-500">No pending student requests for this grade.</div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {pendingStudents.filter(s => s.gradeId === mySections.find(sec => sec.section.id === selectedSectionId)?.grade.id).map(student => (
+                                        <div key={student.id} className="bg-slate-100/70 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-slate-200">
+                                            <div>
+                                                <div className="font-semibold text-slate-800">{student.displayName} <span className="text-xs text-slate-500">({student.email})</span></div>
+                                            </div>
+                                            <div className="flex flex-col sm:flex-row gap-2 items-center">
+                                                <span className="text-xs text-slate-500">Assign to section:</span>
+                                                <select
+                                                    className="bg-white border border-slate-300 rounded-lg px-2 py-1"
+                                                    onChange={e => {
+                                                        const sec = (sections[student.gradeId] || []).find(sec => sec.id === e.target.value);
+                                                        if (sec) {
+                                                            handleAssignStudentToSection(student, { ...sec, gradeId: student.gradeId });
+                                                        }
+                                                    }}
+                                                    defaultValue=""
+                                                    disabled={loading}
+                                                >
+                                                    <option value="" disabled>Select section</option>
+                                                    {(sections[student.gradeId] || []).map(sec => (
+                                                        <option key={sec.id} value={sec.id}>{sec.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
+                            )}
+                            {/* Section Student List */}
+                            <div className="mt-6 font-semibold text-slate-700">Students in Section</div>
+                            <SectionStudentList 
+                                schoolId={schoolId} 
+                                gradeId={mySections.find(s => s.section.id === selectedSectionId)?.grade.id} 
+                                section={mySections.find(s => s.section.id === selectedSectionId)?.section} 
+                                canManage={true} 
+                            />
+                        </Card>
                     ) : (
-                        <div className="text-center py-8">
-                            <InfoIcon />
-                            <h3 className="mt-2 text-lg font-medium text-slate-800">No sections assigned</h3>
-                            <p className="mt-1 text-sm text-slate-500">
-                                You are not currently in charge of any sections. Please contact your school admin.
-                            </p>
-                        </div>
+                        <Card title="Subject Teacher Features" icon={<ClipboardListIcon />}>
+                            <div className="mb-4 font-semibold text-slate-700">Subjects you teach in this section:</div>
+                            <ul className="list-disc ml-6">
+                                {mySections.find(s => s.section.id === selectedSectionId)?.section.subjects?.filter(subj => String(subj.teacherId) === String(userId) || subj.teacherEmail === userProfile?.email).map((subj, idx) => (
+                                    <li key={idx} className="mb-1">
+                                        <span className="font-medium">{subj.name || subj.subjectName || 'Subject'}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                            {/* Student List (read-only) */}
+                            <div className="mt-6 font-semibold text-slate-700">Students in Section</div>
+                            <SectionStudentList 
+                                schoolId={schoolId} 
+                                gradeId={mySections.find(s => s.section.id === selectedSectionId)?.grade.id} 
+                                section={mySections.find(s => s.section.id === selectedSectionId)?.section} 
+                                canManage={false} 
+                            />
+                        </Card>
                     )}
-                </Card>
-            </main>
+                </div>
+            )}
         </div>
     );
 }

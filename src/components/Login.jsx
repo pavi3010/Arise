@@ -25,25 +25,33 @@ const StudentIcon = () => (
 );
 
 function Login({ directRole }) {
+  const { currentUser, userProfile, loading, setUserProfile } = useAuth();
+  const [showLoginSuccess, setShowLoginSuccess] = useState(false);
   const [error, setError] = useState('');
-  // If directRole is 'school', 'staff', or 'student', pre-select that role and show registration
-  // If directRole is 'role', show the role selection page
   const [selectedRole, setSelectedRole] = useState('');
-  // Registration form is only shown on /register/role routes
   const [showCompleteProfile, setShowCompleteProfile] = useState(false);
   const [pendingUser, setPendingUser] = useState(null);
   const [userRoles, setUserRoles] = useState([]);
   const [userType, setUserType] = useState('');
+  // Debug log for every render
+  console.log('[DEBUG] Login render', { currentUser, userProfile, userRoles, pendingUser, showCompleteProfile, showLoginSuccess });
   const navigate = useNavigate();
-  const { currentUser, userProfile, loading } = useAuth();
-  const { setUserProfile } = useAuth(); // We'll add this to AuthContext for updating profile
   const isOnline = useOnlineStatus();
   const location = useLocation();
 
   useEffect(() => {
+    // Restore pendingUser from currentUser if missing (for registration after reload)
+    if (!pendingUser && currentUser) {
+      setPendingUser({
+        uid: currentUser.uid,
+        email: currentUser.email,
+        displayName: currentUser.displayName,
+        photoURL: currentUser.photoURL,
+      });
+    }
     // Do not auto-redirect after login. Always show role selection so user can register for new roles.
     // If offline, do not auto-redirect; let user choose role or login
-  }, [loading, isOnline, currentUser, userProfile, location.pathname, navigate]);
+  }, [loading, isOnline, currentUser, userProfile, location.pathname, navigate, pendingUser]);
 
   function redirectToDashboard(role) {
     if (role === 'school') navigate('/dashboard/school');
@@ -53,47 +61,108 @@ function Login({ directRole }) {
   }
 
   async function handleGoogleSignIn() {
+    console.log('[DEBUG] handleGoogleSignIn called');
     try {
       setError('');
       const user = await signInWithGoogle();
+      console.log('[DEBUG] Google sign-in result:', user);
       if (!user) return;
-      const userDoc = await checkUserExists(user.uid);
-      setPendingUser(userDoc || user);
-      setUserRoles(userDoc?.roles || []);
-      setShowCompleteProfile(false);
+      // Fetch all schools and check for user roles in each
+      const { getFirestore, collection, getDocs, doc, getDoc } = await import('firebase/firestore');
+      const db = getFirestore();
+      const schoolsSnap = await getDocs(collection(db, 'schools'));
+      let foundRoles = [];
+      let foundSchoolId = null;
+      for (const schoolDoc of schoolsSnap.docs) {
+        const userDocRef = doc(db, 'schools', schoolDoc.id, 'users', user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+          const rolesSnap = await getDocs(collection(db, 'schools', schoolDoc.id, 'users', user.uid, 'roles'));
+          foundRoles = rolesSnap.docs.map(doc => doc.id);
+          foundSchoolId = schoolDoc.id;
+          break;
+        }
+      }
+      setPendingUser({ ...user, schoolId: foundSchoolId });
+      setUserRoles(foundRoles);
+      if (foundRoles.length === 0) {
+        setShowCompleteProfile(true);
+      } else {
+        setShowCompleteProfile(false);
+        setShowLoginSuccess(true);
+        setTimeout(() => setShowLoginSuccess(false), 2000);
+      }
     } catch (error) {
       setError('Failed to sign in with Google');
       console.error(error);
     }
   }
 
-  function handleRoleSelect(role) {
+  async function handleRoleSelect(role) {
+    console.log('[DEBUG] handleRoleSelect', { role, userRoles });
     setSelectedRole(role);
-    // Check both pendingUser.roles and userProfile.roles for the selected role
-    const hasRole = (
-      (pendingUser && Array.isArray(pendingUser.roles) && pendingUser.roles.includes(role)) ||
-      (userProfile && Array.isArray(userProfile.roles) && userProfile.roles.includes(role))
-    );
-    if (hasRole) {
-      // User already has this role, go directly to dashboard for that role
-      if (isOnline) {
-        redirectToDashboard(role);
+    // Always fetch latest roles from Firestore before allowing registration
+    try {
+      if (!pendingUser) return;
+      const { getFirestore, collection, getDocs } = await import('firebase/firestore');
+      const db = getFirestore();
+      let foundRoles = [];
+      let foundSchoolId = pendingUser.schoolId;
+      // If user has a schoolId, check that school; otherwise, check all schools
+      if (foundSchoolId) {
+        const rolesSnap = await getDocs(collection(db, 'schools', foundSchoolId, 'users', pendingUser.uid, 'roles'));
+        foundRoles = rolesSnap.docs.map(doc => doc.id);
+      } else {
+        // Check all schools for this user
+        const schoolsSnap = await getDocs(collection(db, 'schools'));
+        for (const schoolDoc of schoolsSnap.docs) {
+          const rolesSnap = await getDocs(collection(db, 'schools', schoolDoc.id, 'users', pendingUser.uid, 'roles'));
+          if (!rolesSnap.empty) {
+            foundRoles = rolesSnap.docs.map(doc => doc.id);
+            foundSchoolId = schoolDoc.id;
+            break;
+          }
+        }
       }
-      setShowCompleteProfile(false);
-    } else {
-      // User does not have this role, navigate to registration route
-      if (role === 'school') navigate('/register/school');
-      else if (role === 'staff' || role === 'teacher') navigate('/register/staff');
-      else if (role === 'student') navigate('/register/student');
+      setUserRoles(foundRoles);
+      // Check userRoles (from roles subcollection) for the selected role
+      const hasRole = foundRoles.includes(role);
+      if (hasRole) {
+        console.log('[DEBUG] User already has this role, redirecting to dashboard');
+        if (isOnline) {
+          redirectToDashboard(role);
+        }
+        setShowCompleteProfile(false);
+      } else {
+        // User does not have this role, navigate to registration route
+        if (role === 'school') navigate('/register/school');
+        else if (role === 'staff' || role === 'teacher') navigate('/register/staff');
+        else if (role === 'student') navigate('/register/student');
+      }
+    } catch (err) {
+      setError('Failed to check user roles. Please try again.');
+      console.error('[DEBUG] Error checking user roles', err);
     }
   }
 
   async function handleCompleteProfile(formData) {
-    if (!pendingUser) return;
-    let newRoles = pendingUser.roles ? [...pendingUser.roles] : [];
-    if (!newRoles.includes(formData.userType)) newRoles.push(formData.userType);
+    if (formData.userType === 'student') {
+      // eslint-disable-next-line no-console
+      console.log('[DEBUG] Student registration formData:', formData);
+    }
+    console.log('[DEBUG] handleCompleteProfile called', formData);
+    if (!pendingUser) {
+      console.log('[DEBUG] No pendingUser, aborting registration');
+      return;
+    }
+    // Write role-specific data to users/{uid}/roles/{role}
+    const { getFirestore, doc, setDoc } = await import('firebase/firestore');
+    const db = getFirestore();
+    const userId = pendingUser.uid || pendingUser.id;
     let schoolId = formData.schoolId;
     if (formData.userType === 'school') {
+  console.log('[DEBUG] Registering as school');
+  console.log('[DEBUG] Registering as staff/student');
       // Add adminEmail to the school document for easy lookup
       schoolId = await createSchool({
         name: formData.name,
@@ -101,10 +170,9 @@ function Login({ directRole }) {
         adminEmail: pendingUser.email
       });
       // Add user as admin to the new school's users subcollection
-      await addSchoolUser(schoolId, pendingUser.uid, {
-        ...pendingUser,
+      await addSchoolUser(schoolId, userId, {
         ...formData,
-        roles: newRoles,
+        email: pendingUser.email,
         userType: 'school',
         schoolId: schoolId
       });
@@ -113,23 +181,108 @@ function Login({ directRole }) {
         alert('School selection required for staff');
         return;
       }
-      const userDoc = {
-        ...pendingUser,
-        ...formData,
-        roles: newRoles,
-        userType: formData.userType,
-        schoolId: schoolId
-      };
-      await createUserInFirestore(pendingUser.uid, userDoc);
+      // Add user to school's users subcollection (for staff/student) with only non-empty fields
+      if (formData.userType === 'staff' || formData.userType === 'student') {
+        const userDoc = {
+          email: pendingUser.email,
+          name: formData.name,
+          userType: formData.userType,
+          schoolId: schoolId,
+          ...(formData.userType === 'staff' || formData.userType === 'teacher' ? { approved: false } : {}),
+        };
+        if (formData.subject) userDoc.subject = formData.subject;
+        if (formData.gradeId) userDoc.gradeId = formData.gradeId;
+        if (formData.sectionId) userDoc.sectionId = formData.sectionId;
+        try {
+          console.log('[DEBUG] Calling addSchoolUser with:', {
+            path: `schools/${schoolId}/users/${userId}`,
+            data: userDoc
+          });
+          await addSchoolUser(schoolId, userId, userDoc);
+          console.log('[DEBUG] addSchoolUser success', userDoc);
+        } catch (err) {
+          setError('Failed to create user in school users collection');
+          console.error('[DEBUG] addSchoolUser error', err);
+          return;
+        }
+      }
     }
-    // Fetch the latest user profile and update context
-    const updatedProfile = await checkUserExists(pendingUser.uid);
-    if (setUserProfile) setUserProfile(updatedProfile);
+    // Add role-specific doc to user's roles subcollection under the school
+    const roleDocRef = doc(db, 'schools', schoolId, 'users', userId, 'roles', formData.userType);
+    if (formData.userType === 'school') {
+      // For school admin, create user root doc using createUserInFirestore
+      await createUserInFirestore(
+        userId,
+        {
+          email: pendingUser.email,
+          displayName: pendingUser.displayName || formData.name,
+          photoURL: pendingUser.photoURL || '',
+          schoolId: schoolId
+        }
+      );
+      await setDoc(roleDocRef, {
+        email: pendingUser.email,
+        name: formData.name,
+        schoolAddress: formData.schoolAddress,
+        schoolId: schoolId,
+        userType: 'school'
+      });
+    } else if (formData.userType === 'student') {
+      // For student, add user root doc using addSchoolUser, set approved: false
+      await addSchoolUser(schoolId, userId, {
+        email: pendingUser.email,
+        name: formData.name,
+        userType: 'student',
+        schoolId: schoolId,
+        approved: false,
+        ...(formData.gradeId ? { gradeId: formData.gradeId } : {}),
+        ...(formData.sectionId ? { sectionId: formData.sectionId } : {})
+      });
+      const studentDoc = {
+        email: pendingUser.email,
+        name: formData.name,
+        schoolId: schoolId,
+        userType: 'student',
+        approved: false,
+      };
+      if (formData.gradeId) studentDoc.gradeId = formData.gradeId;
+      if (formData.sectionId) studentDoc.sectionId = formData.sectionId;
+      await setDoc(roleDocRef, studentDoc);
+    } else if (formData.userType === 'staff' || formData.userType === 'teacher') {
+      // For staff/teacher, add user root doc using addSchoolUser (again, to ensure approved: false is set)
+      await addSchoolUser(schoolId, userId, {
+        email: pendingUser.email,
+        name: formData.name,
+        userType: formData.userType,
+        schoolId: schoolId,
+        approved: false,
+        ...(formData.subject ? { subject: formData.subject } : {}),
+        ...(formData.gradeId ? { gradeId: formData.gradeId } : {}),
+        ...(formData.sectionId ? { sectionId: formData.sectionId } : {})
+      });
+      const staffDoc = {
+        email: pendingUser.email,
+        name: formData.name,
+        schoolId: schoolId,
+        userType: formData.userType,
+        approved: false,
+      };
+      if (formData.subject) staffDoc.subject = formData.subject;
+      if (formData.gradeId) staffDoc.gradeId = formData.gradeId;
+      if (formData.sectionId) staffDoc.sectionId = formData.sectionId;
+      await setDoc(roleDocRef, staffDoc);
+    }
+    // Fetch the latest roles from subcollection and update context
+    const { collection, getDocs } = await import('firebase/firestore');
+    const rolesSnap = await getDocs(collection(db, 'schools', schoolId, 'users', userId, 'roles'));
+    const roles = rolesSnap.docs.map(doc => doc.id);
+    setUserRoles(roles);
     setShowCompleteProfile(false);
+    setShowLoginSuccess(true);
+    setTimeout(() => setShowLoginSuccess(false), 2000);
     if (isOnline) {
       redirectToDashboard(formData.userType);
     }
-    // If offline, do not redirect; let offline logic handle UI
   }
 
   const PageWrapper = ({ children }) => (
@@ -217,6 +370,15 @@ function Login({ directRole }) {
   // Default: show Google login page
   return (
     <PageWrapper>
+      {showLoginSuccess && (
+        <div className="fixed inset-0 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl px-8 py-6 flex flex-col items-center border border-green-200 animate-fade-in">
+            <svg className="w-12 h-12 text-green-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+            <div className="text-lg font-semibold text-green-700 mb-1">Login successful!</div>
+            <div className="text-sm text-gray-500">Welcome back to Arise.</div>
+          </div>
+        </div>
+      )}
       <div className="flex justify-center mb-4">
         <svg className="w-20 h-20 text-indigo-600" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -248,10 +410,6 @@ function Login({ directRole }) {
       </div>
     </PageWrapper>
   );
-
-
-
-
 }
 
 export default Login;

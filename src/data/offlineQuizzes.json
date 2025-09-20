@@ -1,0 +1,32 @@
+[
+  {
+    "subject": "Mathematics",
+    "chapters": [
+      {
+        "name": "Algebra",
+        "topics": [
+          {
+            "name": "Solving Equations",
+            "quizzes": [
+              {
+                "title": "Quiz 1",
+                "questions": [
+                  {
+                    "question": "What is the solution to x + 2 = 5?",
+                    "options": ["1", "2", "3", "4"],
+                    "answer": 2
+                  },
+                  {
+                    "question": "If 2x = 8, what is x?",
+                    "options": ["2", "3", "4", "5"],
+                    "answer": 2
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -55,7 +55,8 @@ function SchoolDashboard({ isOnline }) {
     const [sections, setSections] = useState({});
     const [users, setUsers] = useState([]);
     const [newGrade, setNewGrade] = useState('');
-    const [newSection, setNewSection] = useState('');
+    // Map gradeId to section name input
+    const [newSection, setNewSection] = useState({});
     const [subjectInputs, setSubjectInputs] = useState({});
     const [inchargeInputs, setInchargeInputs] = useState({});
     const [selectedGradeId, setSelectedGradeId] = useState(null);
@@ -170,10 +171,15 @@ function SchoolDashboard({ isOnline }) {
         setLoading(false);
     }
     
-    const staffUsers = users.filter(u => (u.roles?.includes('staff') || u.roles?.includes('teacher') || u.role === 'staff' || u.role === 'teacher') && u.approved !== false);
+    // Only show staff who are explicitly approved
+    const staffUsers = users.filter(u =>
+        (u.userType === 'staff' || u.roles?.includes('staff') || u.role === 'staff') && u.approved === true
+    );
 
-    // Pending teacher requests (not yet approved)
-    const pendingTeachers = users.filter(u => (u.roles?.includes('staff') || u.roles?.includes('teacher') || u.role === 'staff' || u.role === 'teacher') && u.approved === false);
+    // Pending teacher requests (not yet approved, or missing approved field)
+    const pendingTeachers = users.filter(u =>
+        (u.userType === 'staff' || u.userType === 'teacher' || u.roles?.includes('staff') || u.roles?.includes('teacher') || u.role === 'staff' || u.role === 'teacher') && u.approved !== true
+    );
 
     // Approve teacher request
     async function handleApproveTeacher(userId) {
@@ -306,8 +312,8 @@ function SchoolDashboard({ isOnline }) {
                                 </ul>
                                 {/* Add Section to selected grade */}
                                 {selectedGradeId && (
-                                    <form onSubmit={e => { e.preventDefault(); if (!newSection.trim()) return; handleAddSection(selectedGradeId); }} className="flex gap-2 mt-4">
-                                        <input type="text" value={newSection} onChange={e => setNewSection(e.target.value)} placeholder="New Section Name" className="flex-grow text-base bg-white border border-slate-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-sky-300 outline-none transition" disabled={loading} />
+                                    <form onSubmit={e => { e.preventDefault(); if (!newSection[selectedGradeId] || !newSection[selectedGradeId].trim()) return; handleAddSection(selectedGradeId); }} className="flex gap-2 mt-4">
+                                        <input type="text" value={newSection[selectedGradeId] || ''} onChange={e => setNewSection(ns => ({ ...ns, [selectedGradeId]: e.target.value }))} placeholder="New Section Name" className="flex-grow text-base bg-white border border-slate-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-sky-300 outline-none transition" disabled={loading} />
                                         <button type="submit" className="px-4 py-2 text-base font-semibold text-white bg-sky-600 rounded-lg shadow hover:bg-sky-700 disabled:bg-sky-300 transition" disabled={loading}>Add</button>
                                     </form>
                                 )}
