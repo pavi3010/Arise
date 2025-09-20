@@ -1,119 +1,68 @@
 import React, { useState, useEffect } from 'react';
+import { getFirestore, collection, getDocs } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
+import { db } from '../firebase';
+import offlineQuizzes from '../data/offlineQuizzes.json';
+import { getAllQuizzes } from '../utils/db';
+import ExportContentButton from '../components/ExportContentButton';
+import ImportContentButton from '../components/ImportContentButton';
+import WebShareContentButton from '../components/WebShareContentButton';
 
-// Mock data since offlineQuizzes.json is not available
-const offlineQuizzes = [
-  {
-    subject: "Mathematics",
-    chapters: [
-      {
-        name: "Algebra",
-        topics: [
-          {
-            name: "Linear Equations",
-            quizzes: [
-              {
-                title: "Basic Linear Equations",
-                difficulty: "easy",
-                questions: [
-                  {
-                    question: "What is the value of x in: 2x + 5 = 13?",
-                    options: ["3", "4", "5", "6"],
-                    answer: "4"
-                  },
-                  {
-                    question: "Solve for y: 3y - 7 = 14",
-                    options: ["5", "6", "7", "8"],
-                    answer: "7"
-                  }
-                ]
-              },
-              {
-                title: "Intermediate Linear Equations",
-                difficulty: "medium",
-                questions: [
-                  {
-                    question: "If 4x - 3 = 13, what is x?",
-                    options: ["2", "3", "4", "5"],
-                    answer: "4"
-                  },
-                  {
-                    question: "Solve for z: 5z + 2 = 27",
-                    options: ["4", "5", "6", "7"],
-                    answer: "5"
-                  }
-                ]
-              },
-              {
-                title: "Challenging Linear Equations",
-                difficulty: "hard",
-                questions: [
-                  {
-                    question: "If 2x + 3 = 3x - 4, what is x?",
-                    options: ["-7", "7", "-1", "1"],
-                    answer: "7"
-                  },
-                  {
-                    question: "Solve for y: 7y - 2 = 5y + 10",
-                    options: ["6", "5", "7", "8"],
-                    answer: "6"
-                  }
-                ]
-              }
-            ]
+// Helper: get user's grade (replace with your actual logic or context)
+function getUserGrade() {
+  // TODO: Replace with actual grade selection or user context
+  return 'grade6';
+}
+
+// Fetch quizzes from Firestore: quizzes/{grade}/items/*, fallback to offlineQuizzes.json if none
+// Offline-first: load quizzes from IndexedDB, fallback to Firestore/offlineQuizzes.json
+function useOfflineFirstQuizzes(grade) {
+  const [quizzes, setQuizzes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      let data = [];
+      try {
+        // Try IndexedDB first
+        const all = await getAllQuizzes();
+        data = all.filter(q => q.grade === grade);
+        if (!data || data.length === 0) {
+          // fallback to Firestore
+          const itemsRef = collection(db, 'quizzes', grade, 'items');
+          const snapshot = await getDocs(itemsRef);
+          data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          if (!data || data.length === 0) {
+            // fallback to offlineQuizzes.json
+            if (offlineQuizzes[grade]) {
+              data = offlineQuizzes[grade];
+            }
           }
-        ]
+        }
+        if (!cancelled) setQuizzes(data);
+      } catch (e) {
+        if (offlineQuizzes[grade]) {
+          data = offlineQuizzes[grade];
+        } else {
+          data = [];
+        }
+        if (!cancelled) {
+          setQuizzes(data);
+          setError(e.message || 'Failed to load quizzes');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    ]
-  },
-  {
-    subject: "Science",
-    chapters: [
-      {
-        name: "Physics",
-        topics: [
-          {
-            name: "Motion",
-            quizzes: [
-              {
-                title: "Basic Motion",
-                difficulty: "easy",
-                questions: [
-                  {
-                    question: "What is the formula for speed?",
-                    options: ["Distance/Time", "Time/Distance", "Distance × Time", "Distance + Time"],
-                    answer: "Distance/Time"
-                  }
-                ]
-              },
-              {
-                title: "Intermediate Motion",
-                difficulty: "medium",
-                questions: [
-                  {
-                    question: "What is the SI unit of acceleration?",
-                    options: ["m/s²", "m/s", "km/h", "N"],
-                    answer: "m/s²"
-                  }
-                ]
-              },
-              {
-                title: "Challenging Motion",
-                difficulty: "hard",
-                questions: [
-                  {
-                    question: "A car accelerates from 0 to 60 km/h in 5 seconds. What is its average acceleration in m/s²?",
-                    options: ["3.33", "12", "60", "0.2"],
-                    answer: "3.33"
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  }
-];
+    }
+    if (grade) load();
+    return () => { cancelled = true; };
+  }, [grade]);
+  return { quizzes, loading, error };
+}
 
 // Icons
 const BookOpenIcon = () => (
@@ -255,9 +204,7 @@ const BackButton = ({ onClick }) => (
 
 export default function OfflineQuiz() {
   const [step, setStep] = useState(0);
-  const [subjectIdx, setSubjectIdx] = useState(null);
-  const [chapterIdx, setChapterIdx] = useState(null);
-  const [topicIdx, setTopicIdx] = useState(null);
+  const [subject, setSubject] = useState(null);
   const [quizIdx, setQuizIdx] = useState(null);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [selectedOptions, setSelectedOptions] = useState([]);
@@ -265,11 +212,15 @@ export default function OfflineQuiz() {
   const [score, setScore] = useState(0);
   const [quizStarted, setQuizStarted] = useState(false);
 
+  // Fetch quizzes for the user's grade (offline-first)
+  const grade = getUserGrade();
+  const { quizzes, loading, error } = useOfflineFirstQuizzes(grade);
+  // Get unique subjects from quizzes
+  const subjects = Array.from(new Set(quizzes.map(q => q.subject)));
+
   const resetQuiz = () => {
     setStep(0);
-    setSubjectIdx(null);
-    setChapterIdx(null);
-    setTopicIdx(null);
+    setSubject(null);
     setQuizIdx(null);
     setCurrentQuestion(0);
     setSelectedOptions([]);
@@ -279,7 +230,7 @@ export default function OfflineQuiz() {
   };
 
   const renderCurrentStep = () => {
-    // Step 1: Subject Selection
+    // Step 1: Subject Selection (Offline-First)
     if (step === 1) {
       const subjectGradients = [
         'from-red-500 to-pink-600',
@@ -289,7 +240,6 @@ export default function OfflineQuiz() {
         'from-purple-500 to-violet-600',
         'from-cyan-500 to-blue-600'
       ];
-
       return (
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-800 via-blue-800 to-indigo-800 p-8 text-white shadow-2xl w-full h-full min-h-screen">
           <div className="absolute inset-0 opacity-50">
@@ -297,25 +247,29 @@ export default function OfflineQuiz() {
               backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M20 20c0 11.046-8.954 20-20 20v20h20v-20c11.046 0 20-8.954 20-20s-8.954-20-20-20z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
             }}></div>
           </div>
-          
           <div className="relative min-h-screen flex flex-col">
             <div className="flex items-center justify-between mb-8">
               <BackButton onClick={() => setStep(0)} />
               <h2 className="text-3xl font-bold text-center flex-1">Choose Your Subject</h2>
               <div className="w-20"></div>
             </div>
-
+            {/* --- Sharing/Import Buttons --- */}
+            <div className="flex flex-wrap gap-4 mb-8">
+              <ExportContentButton />
+              <ImportContentButton />
+              <WebShareContentButton />
+            </div>
             <div className="flex-1 flex items-center justify-center">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full max-w-6xl">
-                {offlineQuizzes.map((subject, idx) => (
+                {subjects.map((subj, idx) => (
                   <SelectionCard
-                    key={subject.subject}
-                    title={subject.subject}
-                    subtitle={`${subject.chapters?.length || 0} chapters available`}
+                    key={subj}
+                    title={subj}
+                    subtitle={`${quizzes.filter(q => q.subject === subj).length} quizzes`}
                     icon={<BookOpenIcon />}
                     gradient={subjectGradients[idx % subjectGradients.length]}
                     onClick={() => {
-                      setSubjectIdx(idx);
+                      setSubject(subj);
                       setStep(2);
                     }}
                     delay={idx}
@@ -328,142 +282,52 @@ export default function OfflineQuiz() {
       );
     }
 
-    // Step 2: Chapter Selection
-    if (step === 2 && subjectIdx !== null) {
-      const chapters = offlineQuizzes[subjectIdx]?.chapters || [];
-      const chapterGradients = [
-        'from-emerald-500 to-teal-600',
-        'from-blue-500 to-cyan-600',
-        'from-purple-500 to-pink-600',
-        'from-orange-500 to-red-600',
-        'from-indigo-500 to-purple-600'
-      ];
 
+
+    // Step 2: Quiz List for Selected Subject
+    if (step === 2 && subject) {
+      const quizzesBySubject = quizzes.filter(q => q.subject === subject);
       return (
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-800 via-teal-700 to-cyan-800 p-8 text-white shadow-2xl w-full h-full min-h-screen">
-          <div className="absolute inset-0 opacity-30">
-            <div className="w-full h-full" style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M0 0h80v80H0V0zm20 20v40h40V20H20zm20 35a15 15 0 1 1 0-30 15 15 0 0 1 0 30z' fill-rule='evenodd'/%3E%3C/g%3E%3C/svg%3E")`
-            }}></div>
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-800 via-blue-800 to-indigo-800 p-8 text-white shadow-2xl w-full h-full min-h-screen">
+          <div className="flex items-center justify-between mb-8">
+            <BackButton onClick={() => setStep(1)} />
+            <h2 className="text-3xl font-bold text-center flex-1">Select a Quiz</h2>
+            <div className="w-20"></div>
           </div>
-          
-          <div className="relative min-h-screen flex flex-col">
-            <div className="flex items-center justify-between mb-8">
-              <BackButton onClick={() => setStep(1)} />
-              <h2 className="text-3xl font-bold text-center flex-1">Select Chapter</h2>
-              <div className="w-20"></div>
-            </div>
-
-            <div className="flex-1 flex items-center justify-center">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full max-w-6xl">
-                {chapters.map((chapter, idx) => (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full max-w-4xl">
+              {quizzesBySubject.length === 0 ? (
+                <div className="text-slate-200 text-lg col-span-full">No quizzes found for this subject.</div>
+              ) : (
+                quizzesBySubject.map((quiz, idx) => (
                   <SelectionCard
-                    key={chapter.name}
-                    title={chapter.name}
-                    subtitle={`${chapter.topics?.length || 0} topics`}
-                    icon={<BookOpenIcon />}
-                    gradient={chapterGradients[idx % chapterGradients.length]}
-                    onClick={() => {
-                      setChapterIdx(idx);
-                      setStep(3);
-                    }}
-                    delay={idx}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // Step 3: Topic Selection
-    if (step === 3 && subjectIdx !== null && chapterIdx !== null) {
-      const topics = offlineQuizzes[subjectIdx]?.chapters[chapterIdx]?.topics || [];
-      const topicGradients = [
-        'from-violet-500 to-purple-600',
-        'from-pink-500 to-rose-600',
-        'from-blue-500 to-indigo-600',
-        'from-green-500 to-emerald-600',
-        'from-yellow-500 to-amber-600'
-      ];
-
-      return (
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-violet-800 via-purple-700 to-pink-800 p-8 text-white shadow-2xl w-full h-full min-h-screen">
-          <div className="relative min-h-screen flex flex-col">
-            <div className="flex items-center justify-between mb-8">
-              <BackButton onClick={() => setStep(2)} />
-              <h2 className="text-3xl font-bold text-center flex-1">Choose Topic</h2>
-              <div className="w-20"></div>
-            </div>
-
-            <div className="flex-1 flex items-center justify-center">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full max-w-6xl">
-                {topics.map((topic, idx) => (
-                  <SelectionCard
-                    key={topic.name}
-                    title={topic.name}
-                    subtitle={`${topic.quizzes?.length || 0} quizzes`}
-                    icon={<BookOpenIcon />}
-                    gradient={topicGradients[idx % topicGradients.length]}
-                    onClick={() => {
-                      setTopicIdx(idx);
-                      setStep(4);
-                    }}
-                    delay={idx}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // Step 4: Quiz Selection
-    if (step === 4 && subjectIdx !== null && chapterIdx !== null && topicIdx !== null) {
-      const quizzes = offlineQuizzes[subjectIdx]?.chapters[chapterIdx]?.topics[topicIdx]?.quizzes || [];
-
-      return (
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-800 via-blue-700 to-cyan-800 p-8 text-white shadow-2xl w-full h-full min-h-screen">
-          <div className="relative min-h-screen flex flex-col">
-            <div className="flex items-center justify-between mb-8">
-              <BackButton onClick={() => setStep(3)} />
-              <h2 className="text-3xl font-bold text-center flex-1">Select Quiz</h2>
-              <div className="w-20"></div>
-            </div>
-
-            <div className="flex-1 flex items-center justify-center">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">
-                {quizzes.map((quiz, idx) => (
-                  <SelectionCard
-                    key={quiz.title}
+                    key={quiz.title + idx}
                     title={quiz.title}
-                    subtitle={`${quiz.questions?.length || 0} questions`}
-                    icon={<PlayIcon />}
-                    gradient="from-green-500 to-emerald-600"
+                    subtitle={quiz.chapter ? `Chapter: ${quiz.chapter}` : quiz.topic}
+                    icon={<BookOpenIcon />}
+                    gradient="from-blue-500 to-indigo-600"
                     onClick={() => {
                       setQuizIdx(idx);
                       setCurrentQuestion(0);
                       setSelectedOptions([]);
                       setShowResult(false);
                       setScore(0);
-                      setQuizStarted(true);
                       setStep(5);
                     }}
                     delay={idx}
                   />
-                ))}
-              </div>
+                ))
+              )}
             </div>
           </div>
         </div>
       );
     }
 
-    // Step 5: Quiz Playing
-    if (step === 5 && subjectIdx !== null && chapterIdx !== null && topicIdx !== null && quizIdx !== null) {
-      const quiz = offlineQuizzes[subjectIdx]?.chapters[chapterIdx]?.topics[topicIdx]?.quizzes[quizIdx];
+    // Step 5: Quiz Playing (Firestore)
+    if (step === 5 && subject && quizIdx !== null) {
+      const quizzesBySubject = quizzes.filter(q => q.subject === subject);
+      const quiz = quizzesBySubject[quizIdx];
       if (!quiz) return null;
 
       if (!showResult) {
@@ -471,11 +335,12 @@ export default function OfflineQuiz() {
         const hasAnswered = selectedOptions[currentQuestion] !== undefined;
 
         return (
+
           <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-800 via-gray-700 to-slate-800 p-4 sm:p-8 text-white shadow-2xl w-full h-full min-h-screen flex flex-col items-center justify-center">
             <div className="w-full max-w-2xl mx-auto flex flex-col gap-6">
               {/* Progress and Back */}
               <div className="flex items-center justify-between mb-2">
-                <BackButton onClick={() => setStep(4)} />
+                <BackButton onClick={() => setStep(2)} />
                 <div className="flex-1 mx-4">
                   <ProgressBar current={currentQuestion + 1} total={quiz.questions.length} />
                   <div className="text-center">

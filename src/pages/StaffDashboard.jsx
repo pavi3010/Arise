@@ -43,7 +43,7 @@ export default function StaffDashboard() {
 
     async function handleLogout() {
         try {
-            await logOut();
+            navigate('/login');
         } catch (error) {
             console.error("Failed to log out", error);
         }
@@ -144,16 +144,8 @@ export default function StaffDashboard() {
     async function handleAssignStudentToSection(student, section) {
         setLoading(true);
         try {
-            console.log('[DEBUG] Assigning student to section', {
-                schoolId,
-                student,
-                section,
-                sectionGradeId: section.gradeId,
-                sectionId: section.id
-            });
             // Add student ID to section's students array
             const addResult = await addSectionStudent(schoolId, section.gradeId, section.id, student.id);
-            console.log('[DEBUG] addSectionStudent result:', addResult);
             // Update student's sectionId, gradeId, and approved in Firestore directly
             const { db } = await import('../firebase');
             const { doc, updateDoc, setDoc, getDoc } = await import('firebase/firestore');
@@ -167,21 +159,20 @@ export default function StaffDashboard() {
             } else {
                 await setDoc(roleRef, { approved: true, sectionId: section.id, gradeId: section.gradeId }, { merge: true });
             }
-            console.log('[DEBUG] Updated student document and roles subcollection in Firestore with sectionId, gradeId, approved.');
             // Refresh users and sections
             await Promise.all([
-                getSchoolUsers(schoolId).then(u => { console.log('[DEBUG] Refreshed users:', u); setUsers(u); }),
+                getSchoolUsers(schoolId).then(u => { 
+                    setUsers(u); 
+                }),
                 getSchoolGrades(schoolId).then(async gradesList => {
                     setGrades(gradesList);
                     const allSections = {};
                     for (const grade of gradesList) {
                         allSections[grade.id] = await getGradeSections(schoolId, grade.id);
                     }
-                    console.log('[DEBUG] Refreshed sections:', allSections);
                     setSections(allSections);
                 })
             ]);
-            console.log('[DEBUG] Student assignment to section and approval complete.');
         } catch (error) {
             console.error('Failed to assign student to section:', error);
             alert('Failed to assign student to section: ' + (error?.message || error));
@@ -204,7 +195,7 @@ export default function StaffDashboard() {
                         <span className="text-amber-700 bg-amber-100 px-4 py-2 rounded-full font-medium text-lg">Your account is pending approval by the school admin.</span>
                         <span className="text-slate-500 text-center">You will be able to access your dashboard once approved.</span>
                         <SwitchRole />
-                        <button onClick={handleLogout} className="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg shadow-sm hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">Logout</button>
+                        <button onClick={() => navigate(-1)} className="px-4 py-2 text-sm font-medium text-white bg-slate-400 rounded-lg shadow-sm hover:bg-slate-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-400">Back</button>
                     </div>
                 </div>
             </div>
@@ -228,7 +219,7 @@ export default function StaffDashboard() {
                         </span>
                     )}
                     <SwitchRole />
-                    <button onClick={handleLogout} className="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg shadow-sm hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">Logout</button>
+                    <button onClick={() => navigate(-1)} className="px-4 py-2 text-sm font-medium text-white bg-slate-400 rounded-lg shadow-sm hover:bg-slate-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-400">Back</button>
                 </div>
             </header>
 

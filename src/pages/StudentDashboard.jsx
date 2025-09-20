@@ -93,7 +93,6 @@ const InfoCard = ({ title, children, className = "" }) => (
 );
 
 export default function StudentDashboard() {
-  console.log('[StudentDashboard] Component rendered');
   
   const navigate = useNavigate();
   const { userProfile } = useAuth();
@@ -108,7 +107,6 @@ export default function StudentDashboard() {
 
   React.useEffect(() => {
     async function fetchSectionDetails() {
-      console.log('[StudentDashboard] userProfile at start:', userProfile);
       
       if (!userProfile?.schoolId || !userProfile?.gradeId || !userProfile?.sectionId) {
         console.log('[StudentDashboard] Missing required userProfile fields:', {
@@ -129,19 +127,16 @@ export default function StudentDashboard() {
         // Get section info
         const sections = await getGradeSections(userProfile.schoolId, userProfile.gradeId);
         const section = sections.find(sec => sec.id === userProfile.sectionId);
-        console.log('[StudentDashboard] Section:', section);
         setSectionInfo(section);
 
         // Get all users for lookup
         const users = await getSchoolUsers(userProfile.schoolId);
-        console.log('[StudentDashboard] Users:', users);
 
         // Incharge info
         let incharge = null;
         if (section?.incharge) {
           incharge = users.find(u => u.id === section.incharge);
         }
-        console.log('[StudentDashboard] Incharge:', incharge);
         setInchargeInfo(incharge);
 
         // Subject teachers
@@ -160,7 +155,6 @@ export default function StudentDashboard() {
             };
           });
         }
-        console.log('[StudentDashboard] SubjectTeachers:', teachers);
         setSubjectTeachers(teachers);
 
         // Get grade name
@@ -180,7 +174,6 @@ export default function StudentDashboard() {
 
   const handleLogout = async () => {
     try {
-      await logOut();
       navigate('/login');
     } catch (error) {
       console.error('Logout error:', error);
@@ -237,11 +230,13 @@ export default function StudentDashboard() {
           <div className="mt-6 sm:mt-0 flex items-center gap-3">
             <SwitchRole />
             <button
-              onClick={handleLogout}
-              className="inline-flex items-center px-4 py-2 text-sm font-semibold rounded-xl bg-red-500 text-white shadow-lg hover:bg-red-600 hover:shadow-xl transition-all duration-300"
+              onClick={() => navigate(-1)}
+              className="inline-flex items-center px-4 py-2 text-sm font-semibold rounded-xl bg-slate-400 text-white shadow-lg hover:bg-slate-500 hover:shadow-xl transition-all duration-300"
             >
-              <LogoutIcon />
-              <span className="ml-2">Logout</span>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M12.707 15.707a1 1 0 01-1.414 0l-5-5a1 1 0 010-1.414l5-5a1 1 0 111.414 1.414L8.414 9H17a1 1 0 110 2H8.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+              </svg>
+              <span className="ml-2">Back</span>
             </button>
           </div>
         </div>

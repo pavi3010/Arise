@@ -33,8 +33,8 @@ function Login({ directRole }) {
   const [pendingUser, setPendingUser] = useState(null);
   const [userRoles, setUserRoles] = useState([]);
   const [userType, setUserType] = useState('');
+  // Removed offline login state
   // Debug log for every render
-  console.log('[DEBUG] Login render', { currentUser, userProfile, userRoles, pendingUser, showCompleteProfile, showLoginSuccess });
   const navigate = useNavigate();
   const isOnline = useOnlineStatus();
   const location = useLocation();
@@ -60,12 +60,12 @@ function Login({ directRole }) {
     else navigate('/dashboard');
   }
 
+  // Offline login removed
+
   async function handleGoogleSignIn() {
-    console.log('[DEBUG] handleGoogleSignIn called');
     try {
       setError('');
       const user = await signInWithGoogle();
-      console.log('[DEBUG] Google sign-in result:', user);
       if (!user) return;
       // Fetch all schools and check for user roles in each
       const { getFirestore, collection, getDocs, doc, getDoc } = await import('firebase/firestore');
@@ -85,6 +85,7 @@ function Login({ directRole }) {
       }
       setPendingUser({ ...user, schoolId: foundSchoolId });
       setUserRoles(foundRoles);
+      // Removed localStorage write for offline login
       if (foundRoles.length === 0) {
         setShowCompleteProfile(true);
       } else {
@@ -99,7 +100,6 @@ function Login({ directRole }) {
   }
 
   async function handleRoleSelect(role) {
-    console.log('[DEBUG] handleRoleSelect', { role, userRoles });
     setSelectedRole(role);
     // Always fetch latest roles from Firestore before allowing registration
     try {
@@ -128,7 +128,6 @@ function Login({ directRole }) {
       // Check userRoles (from roles subcollection) for the selected role
       const hasRole = foundRoles.includes(role);
       if (hasRole) {
-        console.log('[DEBUG] User already has this role, redirecting to dashboard');
         if (isOnline) {
           redirectToDashboard(role);
         }
@@ -142,17 +141,24 @@ function Login({ directRole }) {
     } catch (err) {
       setError('Failed to check user roles. Please try again.');
       console.error('[DEBUG] Error checking user roles', err);
+      // Logout handler
+      const handleLogout = async () => {
+        try {
+          const { getAuth, signOut } = await import('firebase/auth');
+          const auth = getAuth();
+          await signOut(auth);
+          window.location.reload();
+        } catch (err) {
+          alert('Failed to logout. Please try again.');
+        }
+      };
     }
   }
 
   async function handleCompleteProfile(formData) {
     if (formData.userType === 'student') {
-      // eslint-disable-next-line no-console
-      console.log('[DEBUG] Student registration formData:', formData);
     }
-    console.log('[DEBUG] handleCompleteProfile called', formData);
     if (!pendingUser) {
-      console.log('[DEBUG] No pendingUser, aborting registration');
       return;
     }
     // Write role-specific data to users/{uid}/roles/{role}
@@ -161,8 +167,6 @@ function Login({ directRole }) {
     const userId = pendingUser.uid || pendingUser.id;
     let schoolId = formData.schoolId;
     if (formData.userType === 'school') {
-  console.log('[DEBUG] Registering as school');
-  console.log('[DEBUG] Registering as staff/student');
       // Add adminEmail to the school document for easy lookup
       schoolId = await createSchool({
         name: formData.name,
@@ -199,7 +203,6 @@ function Login({ directRole }) {
             data: userDoc
           });
           await addSchoolUser(schoolId, userId, userDoc);
-          console.log('[DEBUG] addSchoolUser success', userDoc);
         } catch (err) {
           setError('Failed to create user in school users collection');
           console.error('[DEBUG] addSchoolUser error', err);
@@ -209,6 +212,7 @@ function Login({ directRole }) {
     }
     // Add role-specific doc to user's roles subcollection under the school
     const roleDocRef = doc(db, 'schools', schoolId, 'users', userId, 'roles', formData.userType);
+    // Removed localStorage update for offline login
     if (formData.userType === 'school') {
       // For school admin, create user root doc using createUserInFirestore
       await createUserInFirestore(
@@ -317,10 +321,28 @@ function Login({ directRole }) {
       }
       handleRoleSelect(role);
     };
+
+    const handleLogout = async () => {
+      try {
+        const { getAuth, signOut } = await import('firebase/auth');
+        const auth = getAuth();
+        await signOut(auth);
+        window.location.reload();
+      } catch (err) {
+        alert('Failed to logout. Please try again.');
+      }
+    };
     return (
       <PageWrapper>
         <h1 className="text-3xl font-bold text-center text-slate-800">Select Your Role</h1>
         <p className="text-center text-slate-500 pb-4">How will you be using the Arise platform?</p>
+        <button
+            onClick={handleLogout}
+            className="mt-6 w-full flex items-center justify-center px-6 py-3 text-base font-semibold text-red-700 bg-white rounded-xl shadow border-2 border-red-200 hover:bg-red-50 hover:border-red-400 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2"
+          >
+            <svg className="w-5 h-5 mr-2 text-red-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2h4a2 2 0 012 2v1" /></svg>
+            Logout
+        </button>
         <div className="flex flex-col gap-4">
           {allRoles.map(role => (
             <button 
@@ -368,6 +390,8 @@ function Login({ directRole }) {
   }
 
   // Default: show Google login page
+  // Offline login UI removed
+
   return (
     <PageWrapper>
       {showLoginSuccess && (

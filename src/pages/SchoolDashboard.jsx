@@ -84,7 +84,12 @@ function SchoolDashboard({ isOnline }) {
         refreshData();
     }, [schoolId]);
 
-    function handleLogout() {
+    async function handleLogout() {
+        try {
+        } catch (err) {
+            // Optionally log error
+            console.error('Logout error:', err);
+        }
         navigate('/login');
     }
 
@@ -201,7 +206,7 @@ function SchoolDashboard({ isOnline }) {
             {/* Sidebar for desktop */}
             <aside className="hidden lg:flex flex-col w-64 bg-white/80 border-r border-slate-200/80 shadow-lg z-20">
                 <div className="flex items-center gap-2 px-6 py-6 border-b border-slate-200">
-                    <span className="text-2xl font-bold text-indigo-700">School Console</span>
+                    <span className="text-2xl font-bold text-indigo-700">School Dashboard</span>
                 </div>
                 <nav className="flex-1 py-4">
                     {navItems.map(item => (
@@ -216,16 +221,29 @@ function SchoolDashboard({ isOnline }) {
                     ))}
                 </nav>
                 <div className="px-6 pb-6 mt-auto">
-                    <button onClick={handleLogout} className="flex items-center gap-2 w-full px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg shadow-sm hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors">
-                        <LogoutIcon />
-                        <span>Logout</span>
-                    </button>
+                                        <button onClick={() => navigate(-1)} className="flex items-center gap-2 w-full px-4 py-2 text-sm font-medium text-white bg-slate-400 rounded-lg shadow-sm hover:bg-slate-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-400 transition-colors">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path fillRule="evenodd" d="M12.707 15.707a1 1 0 01-1.414 0l-5-5a1 1 0 010-1.414l5-5a1 1 0 111.414 1.414L8.414 9H17a1 1 0 110 2H8.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+                                                </svg>
+                                                <span>Back</span>
+                                        </button>
                 </div>
             </aside>
 
             {/* Top nav for mobile */}
             <div className="lg:hidden fixed top-0 left-0 w-full bg-white/90 border-b border-slate-200 z-30 flex items-center justify-between px-4 py-3 shadow-md">
-                <span className="text-xl font-bold text-indigo-700">School Console</span>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="inline-flex items-center px-3 py-1 text-sm font-semibold rounded-xl bg-slate-400 text-white shadow hover:bg-slate-500 transition-all duration-200"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M12.707 15.707a1 1 0 01-1.414 0l-5-5a1 1 0 010-1.414l5-5a1 1 0 111.414 1.414L8.414 9H17a1 1 0 110 2H8.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+                        </svg>
+                        <span className="ml-2">Back</span>
+                    </button>
+                    <span className="text-xl font-bold text-indigo-700">School Console</span>
+                </div>
                 <button onClick={() => setSidebarOpen(o => !o)} className="p-2 rounded-lg bg-indigo-100 text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
                 </button>
@@ -249,12 +267,6 @@ function SchoolDashboard({ isOnline }) {
                                 </button>
                             ))}
                         </nav>
-                        <div className="px-6 pb-6 mt-auto">
-                            <button onClick={handleLogout} className="flex items-center gap-2 w-full px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg shadow-sm hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors">
-                                <LogoutIcon />
-                                <span>Logout</span>
-                            </button>
-                        </div>
                     </aside>
                 </div>
             )}
